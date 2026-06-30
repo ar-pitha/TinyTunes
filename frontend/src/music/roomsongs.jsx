@@ -56,6 +56,11 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
   // Reconnection overlay state
   const [isReconnecting, setIsReconnecting] = useState(false);
 
+  // Guest-local pause: when true, only this guest's audio is paused locally.
+  // The room keeps playing. On resume the guest re-syncs to the live position.
+  const [guestPaused, setGuestPaused] = useState(false);
+  const guestPausedRef = useRef(false);
+
   // allow guests to enable playback (user gesture) so audio.play() won't be blocked
   const [playbackEnabled, setPlaybackEnabled] = useState(false);
   // Guest volume (independent of host)
@@ -269,9 +274,11 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 					const audioTime = audioRef.current.currentTime || 0;
 					const drift = Math.abs(audioTime - targetTime);
 					
-					// Only correct MAJOR drift (> 1 second) to avoid constant seeking that breaks audio
-					// Small drifts don't affect user experience and cause audio pops/clicks
-					if (drift > 1.0) {
+					// Only correct time on the very first fetch (initialLoad).
+					// After that, the socket is the real-time sync channel.
+					// Correcting on every REST poll (every 1.5 s) forces the browser to
+					// discard its buffer and re-download, causing the stuttering/breaking sound.
+					if (initialLoad.current) {
 						try { 
 							audioRef.current.currentTime = targetTime;
 							setCurrentTime(targetTime);
@@ -340,6 +347,10 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     allSongsRef.current = allSongs;
     isHostRef.current = isHost;
   }, [allSongs, isHost]);
+
+  // Keep guestPausedRef in sync so async callbacks (intervals, socket handlers)
+  // can read the latest value without stale closures.
+  useEffect(() => { guestPausedRef.current = guestPaused; }, [guestPaused]);
 
   // Socket: join room and listen for host playback
   useEffect(() => {
@@ -425,13 +436,17 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       // If the audio src is already loaded for this song, seek directly now
       // (the useEffect won't trigger a reload, so we must seek here)
       if (srcAlreadyLoaded && audioRef.current) {
-        const audioTime = audioRef.current.currentTime || 0;
-        const drift = Math.abs(audioTime - targetTime);
-        if (drift > 1.0) {
-          try {
-            audioRef.current.currentTime = targetTime;
-            lastGuestSyncRef.current = now;
-          } catch (e) {}
+        // Only correct significant drift (>3 s) to avoid constant re-buffering.
+        // Also skip if the guest has personally paused their local audio.
+        if (!guestPausedRef.current) {
+          const audioTime = audioRef.current.currentTime || 0;
+          const drift = Math.abs(audioTime - targetTime);
+          if (drift > 3.0) {
+            try {
+              audioRef.current.currentTime = targetTime;
+              lastGuestSyncRef.current = now;
+            } catch (e) {}
+          }
         }
         pendingSeekTimeRef.current = null; // consumed
       }
@@ -704,6 +719,11 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     // compare by id to avoid absolute/relative URL differences
     const srcIncludesId = audio.src && String(audio.src).includes(currentSong._id);
     if (!srcIncludesId) {
+      // New song src — auto-resume guest-local pause so they hear the new track.
+      if (guestPausedRef.current) {
+        setGuestPaused(false);
+        guestPausedRef.current = false;
+      }
       // Priority order for resume time:
       // 1. pendingSeekTimeRef — latency-compensated time from the most recent socket
       //    playback event (most accurate, avoids React state async delay)
@@ -721,17 +741,18 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       audio.style.width = '100%';
       audio.style.height = '1px';
       // delegate src/load/play handling to helper to avoid race conditions
-      applyAudioSrc(streamUrl, isPlaying && playbackEnabled, resumeTime);
+      applyAudioSrc(streamUrl, isPlaying && playbackEnabled && !guestPausedRef.current, resumeTime);
       return;
     }
 
 
     const trySyncTime = () => {
       try { if (typeof audio.duration === 'number' && !Number.isNaN(audio.duration)) setCurrentDuration(audio.duration); } catch (e) {}
-      if (!Number.isNaN(currentTime) && Math.abs(audio.currentTime - currentTime) > 1) {
+      // Only correct drift >3 s — smaller corrections interrupt buffering and cause pops/clicks
+      if (!Number.isNaN(currentTime) && Math.abs(audio.currentTime - currentTime) > 3) {
         try { audio.currentTime = currentTime; } catch (e) {}
       }
-      if (isPlaying) audio.play().catch(() => {});
+      if (isPlaying && !guestPausedRef.current) audio.play().catch(() => {});
       else audio.pause();
     };
 
@@ -756,6 +777,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     let mounted = true;
     const interval = setInterval(() => {
       if (!mounted) return;
+      // Don't correct while guest has locally paused — they re-sync when they resume
+      if (guestPausedRef.current) return;
       const audio = audioRef.current;
       if (!audio || !audio.src) return;
       
@@ -773,15 +796,15 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       const audioTime = audio.currentTime || 0;
       const drift = Math.abs(audioTime - targetTime);
       
-      // Only correct SIGNIFICANT drift (> 1 second) to avoid constant seeking that breaks audio
-      // Smaller drifts are tolerable and won't be noticeable to users
-      if (drift > 1.0) {
+      // Only correct SIGNIFICANT drift (>3 seconds) to avoid constant seeking that breaks audio.
+      // Drifts under 3 s are not noticeable; frequent corrections force re-buffering (stuttering).
+      if (drift > 3.0) {
         try {
           audio.currentTime = targetTime;
           setCurrentTime(targetTime);
         } catch (e) {}
       }
-    }, 2000); // Check every 2 seconds instead of 100ms to reduce seeking interruptions
+    }, 5000); // Check every 5 s — frequent corrections disrupt buffering and cause audio breaks
     
     return () => {
       mounted = false;
@@ -926,6 +949,32 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     };
     emitHostPlayback(payload);
     persistPlayback(payload);
+  };
+
+  // Guest toggles their own local audio — does NOT affect the room or other users.
+  // On resume, audio seeks to the current live position so the guest rejoins in sync.
+  const guestTogglePlayPause = () => {
+    if (isHost) return; // guard — hosts use togglePlayPause
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!currentSong || currentSong.source === 'device') return;
+    if (!playbackEnabled) return; // must tap "Listen Live" first
+
+    if (guestPaused) {
+      // Re-sync to the current live position before resuming
+      const now = Date.now();
+      let targetTime = expectedTimeAtSync || 0;
+      if (lastSyncTimestamp > 0 && isPlaying) {
+        const elapsed = Math.max(0, (now - lastSyncTimestamp) / 1000);
+        targetTime = (expectedTimeAtSync || 0) + elapsed;
+      }
+      try { audio.currentTime = targetTime; } catch (e) {}
+      audio.play().catch(() => {});
+      setGuestPaused(false);
+    } else {
+      audio.pause();
+      setGuestPaused(true);
+    }
   };
 
   // When current song ends
@@ -1157,7 +1206,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
     audioPendingRef.current.listener = onCanPlay;
     audio.crossOrigin = 'anonymous';
-    audio.preload = 'none';
+    // 'auto' lets the browser buffer ahead, preventing stalls and audio breaking.
+    audio.preload = 'auto';
     try {
       audio.removeAttribute('src');
       audio.src = url;
@@ -1382,9 +1432,28 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         <button onClick={() => seekBy(-10)} disabled={!isHost} title="Rewind 10s">
           ⏪ {isHost ? '10s' : 'Rewind (Host only)'}
         </button>
-        <button onClick={togglePlayPause} style={{ minWidth: '100px' }}>
-          {isPlaying ? '⏸️ Pause' : '▶️ Play'}
+        <button
+          onClick={isHost ? togglePlayPause : guestTogglePlayPause}
+          disabled={!isHost && !playbackEnabled}
+          style={{ minWidth: '100px' }}
+          title={
+            !isHost && !playbackEnabled
+              ? 'Tap "Listen Live" to enable audio first'
+              : !isHost && guestPaused
+              ? 'Click to rejoin the live stream at current position'
+              : ''
+          }
+        >
+          {isHost
+            ? (isPlaying ? '⏸️ Pause' : '▶️ Play')
+            : (guestPaused ? '▶️ Rejoin Live' : (isPlaying ? '⏸ Pause (me)' : '▶️ Play'))
+          }
         </button>
+        {!isHost && guestPaused && (
+          <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 4, textAlign: 'center', gridColumn: '1 / -1' }}>
+            ⏸ Your audio is paused locally — the room is still playing
+          </div>
+        )}
         <button onClick={() => seekBy(10)} disabled={!isHost} title="Forward 10s">
           {isHost ? '10s' : 'Forward (Host only)'} ⏩
         </button>
