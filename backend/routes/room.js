@@ -129,7 +129,7 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
     const { code } = req.params;
     const userId = req.user.id;
     // Destructure playback details from req.body
-    const { currentSongId, currentTime, isPlaying, queue } = req.body;
+    const { currentSongId, currentSong: currentSongPayload, currentTime, isPlaying, queue, serverTime, syncTimestamp } = req.body;
 
     // Validate room
     const room = await Room.findOne({ code });
@@ -140,16 +140,24 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Only host can update playback' });
     }
 
-    // Validate currentSongId if provided
+    // Update currentSong — skip DB lookup for device songs (non-ObjectId IDs)
     if (currentSongId) {
-      try {
-        const songExists = await Song.findById(currentSongId);
-        if (songExists) {
-          room.currentSong = currentSongId;
+      const isValidObjectId = mongoose.Types.ObjectId.isValid(currentSongId);
+      if (isValidObjectId) {
+        try {
+          const songExists = await Song.findById(currentSongId);
+          if (songExists) {
+            room.currentSong = currentSongId;
+          }
+          // If not found, keep existing currentSong (song may have been deleted)
+        } catch (e) {
+          console.warn('Song lookup error:', e.message);
+          // Continue — do not block playback update
         }
-      } catch (e) {
-        console.warn('Song validation error:', e.message);
-        // Continue even if song doesn't exist - might be deleted
+      } else {
+        // Device song — ID is not a MongoDB ObjectId, store null in DB
+        // (device songs can't be stored in MongoDB; metadata is in the socket payload)
+        room.currentSong = null;
       }
     } else {
       room.currentSong = null;
@@ -158,19 +166,18 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
     if (typeof currentTime === 'number') room.currentTime = Math.max(0, currentTime);
     if (typeof isPlaying === 'boolean') room.isPlaying = isPlaying;
     if (Array.isArray(queue)) {
-      // Convert queue items to valid ObjectIds if they're strings
-      room.queue = queue.filter(q => q).map(q => {
-        const id = typeof q === 'string' ? q : (q._id || q);
-        try {
-          return id;
-        } catch (e) {
-          return null;
-        }
-      }).filter(q => q);
+      // Only persist valid ObjectId queue entries (device songs are socket-only)
+      room.queue = queue
+        .filter(q => q)
+        .map(q => {
+          const id = typeof q === 'string' ? q : (q._id || null);
+          return id && mongoose.Types.ObjectId.isValid(id) ? id : null;
+        })
+        .filter(q => q);
     }
 
-    // Add server-side timestamp for real-time sync
-    room.syncTimestamp = Date.now();
+    // Server-side timestamp for real-time sync (prefer client's serverTime if provided)
+    room.syncTimestamp = serverTime || Date.now();
     room.lastSyncAt = new Date();
 
     await room.save();

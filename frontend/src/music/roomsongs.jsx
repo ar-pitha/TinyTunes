@@ -58,6 +58,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
   // allow guests to enable playback (user gesture) so audio.play() won't be blocked
   const [playbackEnabled, setPlaybackEnabled] = useState(false);
+  // Guest volume (independent of host)
+  const [guestVolume, setGuestVolume] = useState(1);
 
   // Device songs state (local files picked by host)
   const [deviceSongs, setDeviceSongs] = useState([]);
@@ -72,6 +74,10 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
   const socketRef = useRef(null);
   const initialLoad = useRef(true);
   const lastGuestSyncRef = useRef(0); // Track last sync time for guests
+  // Holds the latency-compensated target time from the most recent socket playback event.
+  // Used by the guest audio effect to start the audio at the correct position
+  // (avoids starting at 0 due to React state being async when song src changes).
+  const pendingSeekTimeRef = useRef(null);
 
   // On mount: load cached room/songs immediately, then refresh in background
   useEffect(() => {
@@ -217,7 +223,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
 				const serverSongId = server.currentSong?._id || server.currentSongId || null;
 				const localSongId = currentSong?._id || null;
-				if (serverSongId !== localSongId) {
+
+				// If the guest's current song is a device song (source === 'device'),
+				// the REST response will always return currentSong=null (device IDs are not
+				// stored as ObjectIds in MongoDB). Trust the socket state in that case.
+				const localIsDeviceSong = currentSong?.source === 'device';
+
+				if (serverSongId !== localSongId && !localIsDeviceSong) {
 					if (serverSongId) {
 						const found = allSongs.find(s => s._id === serverSongId);
 						const songData = found || server.currentSong || { _id: serverSongId };
@@ -370,23 +382,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     socketRef.current.on('playback', (playback) => {
       if (!playback) return;
       if (isHostRef.current) return;
-      
-      // Update song
-      if (playback.currentSong) {
-        setCurrentSong(playback.currentSong);
-      } else if (playback.currentSongId) {
-        const found = allSongsRef.current.find(s => s._id === playback.currentSongId);
-        setCurrentSong(found || { _id: playback.currentSongId });
-      } else {
-        setCurrentSong(null);
-      }
 
-      // REAL-TIME SYNC: Use server timestamp if provided
+      // REAL-TIME SYNC: Calculate latency-compensated target time FIRST (before any state updates)
       const now = Date.now();
-      const syncTimestamp = playback.serverTime || Date.now();
+      const syncTimestamp = playback.serverTime || now;
       const expectedTime = typeof playback.currentTime === 'number' ? playback.currentTime : 0;
-      
-      // Store sync reference
+
+      // Store sync reference (for continuous drift correction)
       setLastSyncTimestamp(syncTimestamp);
       setExpectedTimeAtSync(expectedTime);
 
@@ -394,44 +396,59 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       let targetTime = expectedTime;
       if (playback.isPlaying && syncTimestamp) {
         const timeSinceSyncMs = now - syncTimestamp;
-        const timeSinceSyncSec = timeSinceSyncMs / 1000;
+        const timeSinceSyncSec = Math.max(0, timeSinceSyncMs / 1000);
         targetTime = expectedTime + timeSinceSyncSec;
       }
 
-      // Sync audio if loaded - only correct MAJOR drift to avoid breaking audio
-      if (audioRef.current && audioRef.current.src) {
+      // Store the correct target time in a ref so the guest audio useEffect
+      // can use it immediately when loading a new song src.
+      // (React state updates are async, so setCurrentTime alone isn't enough
+      //  when the song src also changes in the same render cycle.)
+      pendingSeekTimeRef.current = targetTime;
+
+      // Determine if this event changes the current song
+      const incomingSongId = playback.currentSong?._id || playback.currentSongId || null;
+      const currentAudioSrc = audioRef.current?.src || '';
+      const srcAlreadyLoaded = incomingSongId && currentAudioSrc.includes(incomingSongId);
+
+      // Update song state
+      if (playback.currentSong) {
+        setCurrentSong(playback.currentSong);
+      } else if (playback.currentSongId) {
+        const found = allSongsRef.current.find(s => s._id === playback.currentSongId);
+        setCurrentSong(found || { _id: playback.currentSongId });
+      } else {
+        setCurrentSong(null);
+        pendingSeekTimeRef.current = null;
+      }
+
+      // If the audio src is already loaded for this song, seek directly now
+      // (the useEffect won't trigger a reload, so we must seek here)
+      if (srcAlreadyLoaded && audioRef.current) {
         const audioTime = audioRef.current.currentTime || 0;
         const drift = Math.abs(audioTime - targetTime);
-        
-        // Only sync if drift is significant (> 1 second) to avoid constant seeking that breaks audio
         if (drift > 1.0) {
-          try { 
+          try {
             audioRef.current.currentTime = targetTime;
-            setCurrentTime(targetTime);
             lastGuestSyncRef.current = now;
           } catch (e) {}
         }
+        pendingSeekTimeRef.current = null; // consumed
       }
 
+      setCurrentTime(targetTime);
       if (typeof playback.isPlaying === 'boolean') setIsPlaying(playback.isPlaying);
+
       if (Array.isArray(playback.queue)) {
-        // If server sent full objects with title/artist, use them directly
-        // Otherwise fallback to looking up in allSongs (which may be incomplete)
         const newQ = playback.queue.map(q => {
           if (typeof q === 'string') {
-            // Just an ID - try to find song or create placeholder
             return allSongsRef.current.find(s => s._id === q) || { _id: q, title: '(unknown)', artist: '' };
           }
-          if (q._id && (q.title || q.artist)) {
-            // Full object with metadata - use as-is
-            return q;
-          }
-          // Partial object - try to enrich with allSongs lookup
+          if (q._id && (q.title || q.artist)) return q;
           const found = allSongsRef.current.find(s => s._id === q._id);
           return found || { _id: q._id, title: q.title || '(unknown)', artist: q.artist || '' };
         });
         setQueue(newQ);
-        // Cache queue for persistence
         try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ)); } catch (e) {}
       }
     });
@@ -687,9 +704,19 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     // compare by id to avoid absolute/relative URL differences
     const srcIncludesId = audio.src && String(audio.src).includes(currentSong._id);
     if (!srcIncludesId) {
-      // Check if we have a saved position for resume
-      const savedPos = sessionStorage.getItem(`room_${roomCode}_position`);
-      const resumeTime = savedPos ? parseFloat(savedPos) : currentTime;
+      // Priority order for resume time:
+      // 1. pendingSeekTimeRef — latency-compensated time from the most recent socket
+      //    playback event (most accurate, avoids React state async delay)
+      // 2. sessionStorage saved position (for page refresh resume)
+      // 3. currentTime state (fallback)
+      let resumeTime;
+      if (pendingSeekTimeRef.current !== null) {
+        resumeTime = pendingSeekTimeRef.current;
+        pendingSeekTimeRef.current = null; // consume it
+      } else {
+        const savedPos = sessionStorage.getItem(`room_${roomCode}_position`);
+        resumeTime = savedPos ? parseFloat(savedPos) : currentTime;
+      }
       // ensure audio element can load even if controls hidden
       audio.style.width = '100%';
       audio.style.height = '1px';
@@ -1366,16 +1393,53 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         </button>
       </div>
 
-      {!isHost && currentSong && !playbackEnabled && (
+      {!isHost && currentSong && currentSong.source !== 'device' && !playbackEnabled && (
         <div className="enable-playback-container">
           <button
             onClick={() => {
               setPlaybackEnabled(true);
-              try { audioRef.current?.play().catch(() => {}); } catch (e) {}
+              // Compute live position so audio starts in sync, not at 0
+              const audio = audioRef.current;
+              if (audio) {
+                const now = Date.now();
+                let targetTime = expectedTimeAtSync || 0;
+                if (lastSyncTimestamp > 0 && isPlaying) {
+                  const elapsed = Math.max(0, (now - lastSyncTimestamp) / 1000);
+                  targetTime = (expectedTimeAtSync || 0) + elapsed;
+                }
+                if (targetTime > 0) {
+                  try { audio.currentTime = targetTime; } catch (e) {}
+                }
+                audio.play().catch(() => {});
+              }
             }}
           >
-            🔊 Enable Playback on This Device
+            🔊 Tap to Listen Live
           </button>
+          <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: 4 }}>
+            Browser requires a tap before playing audio
+          </div>
+        </div>
+      )}
+
+      {/* Guest volume control (shown once playback is enabled) */}
+      {!isHost && playbackEnabled && currentSong && currentSong.source !== 'device' && (
+        <div className="guest-volume-control" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+          <span>🔊</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={guestVolume}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              setGuestVolume(v);
+              if (audioRef.current) audioRef.current.volume = v;
+            }}
+            style={{ width: '120px' }}
+          />
+          <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>{Math.round(guestVolume * 100)}%</span>
         </div>
       )}
 
