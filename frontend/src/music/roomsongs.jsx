@@ -422,16 +422,26 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       const currentAudioSrc = audioRef.current?.src || '';
       const srcAlreadyLoaded = incomingSongId && currentAudioSrc.includes(incomingSongId);
 
-      // Update song state
-      if (playback.currentSong) {
-        setCurrentSong(playback.currentSong);
-      } else if (playback.currentSongId) {
-        const found = allSongsRef.current.find(s => s._id === playback.currentSongId);
-        setCurrentSong(found || { _id: playback.currentSongId });
-      } else {
-        setCurrentSong(null);
-        pendingSeekTimeRef.current = null;
-      }
+      // Update song state — compare by _id first so we don't create a new object
+      // reference every 300ms (host tick rate). A new reference causes `currentSong`
+      // state to change on every socket event, which re-runs the guest audio effect
+      // every 300ms and calls audio.play() — that's what breaks the audio and overrides
+      // the guest pause button.
+      const incomingSong = playback.currentSong || null;
+      const incomingId = incomingSong?._id || playback.currentSongId || null;
+
+      // Only mutate currentSong state when the song ID actually changes
+      setCurrentSong(prev => {
+        const prevId = prev?._id || null;
+        if (prevId === incomingId) return prev; // same song — keep same reference
+        if (incomingId === null) {
+          pendingSeekTimeRef.current = null;
+          return null;
+        }
+        if (incomingSong) return incomingSong;
+        const found = allSongsRef.current.find(s => s._id === incomingId);
+        return found || { _id: incomingId };
+      });
 
       // If the audio src is already loaded for this song, seek directly now
       // (the useEffect won't trigger a reload, so we must seek here)
@@ -451,20 +461,32 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         pendingSeekTimeRef.current = null; // consumed
       }
 
-      setCurrentTime(targetTime);
+      // Do NOT update currentTime state from socket — it fights audio's onTimeUpdate
+      // and causes the progress bar to jump/fluctuate constantly. The sync refs
+      // (lastSyncTimestamp + expectedTimeAtSync) are enough for drift correction.
+      // currentTime state is kept accurate by onTimeUpdate from the audio element.
+
+      // Only update isPlaying state when value actually changes (React deduplicates
+      // primitives, but being explicit makes the intent clear)
       if (typeof playback.isPlaying === 'boolean') setIsPlaying(playback.isPlaying);
 
       if (Array.isArray(playback.queue)) {
-        const newQ = playback.queue.map(q => {
-          if (typeof q === 'string') {
-            return allSongsRef.current.find(s => s._id === q) || { _id: q, title: '(unknown)', artist: '' };
-          }
-          if (q._id && (q.title || q.artist)) return q;
-          const found = allSongsRef.current.find(s => s._id === q._id);
-          return found || { _id: q._id, title: q.title || '(unknown)', artist: q.artist || '' };
+        // Serialise to compare — skip state update when queue content hasn't changed
+        const newQIds = playback.queue.map(q => (typeof q === 'string' ? q : q._id)).join(',');
+        setQueue(prev => {
+          const prevIds = prev.map(q => q._id || q).join(',');
+          if (prevIds === newQIds) return prev; // no change
+          const mapped = playback.queue.map(q => {
+            if (typeof q === 'string') {
+              return allSongsRef.current.find(s => s._id === q) || { _id: q, title: '(unknown)', artist: '' };
+            }
+            if (q._id && (q.title || q.artist)) return q;
+            const found = allSongsRef.current.find(s => s._id === q._id);
+            return found || { _id: q._id, title: q.title || '(unknown)', artist: q.artist || '' };
+          });
+          try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(mapped)); } catch (e) {}
+          return mapped;
         });
-        setQueue(newQ);
-        try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ)); } catch (e) {}
       }
     });
 
@@ -968,11 +990,18 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         const elapsed = Math.max(0, (now - lastSyncTimestamp) / 1000);
         targetTime = (expectedTimeAtSync || 0) + elapsed;
       }
+      // Set ref immediately (before React schedules the state update) so any
+      // socket/interval callback that fires in the same tick sees the new value.
+      guestPausedRef.current = false;
       try { audio.currentTime = targetTime; } catch (e) {}
       audio.play().catch(() => {});
       setGuestPaused(false);
     } else {
       audio.pause();
+      // Set ref immediately — don't wait for the useEffect to sync it.
+      // The next socket event (arrives within 300ms) must see guestPaused=true
+      // so it doesn't call audio.play() and override the pause.
+      guestPausedRef.current = true;
       setGuestPaused(true);
     }
   };
