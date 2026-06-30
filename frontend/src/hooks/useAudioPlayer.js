@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * Custom hook to manage audio player state and controls
@@ -54,18 +55,19 @@ export const useAudioPlayer = () => {
   }, []);
 
   /**
-   * Play audio from a specific path
+   * Play audio from a content URI (e.g. content://media/external/audio/media/123)
    */
-  const playAudio = useCallback((path) => {
-    const audio = audioRef.current;
-    audio.src = `file://${path}`;
-    audio.play().catch((err) => {
-      console.error('Play error:', err);
-      setError('Failed to play audio');
-    });
-    setIsPlaying(true);
-    setError(null);
-  }, []);
+  const playAudio = useCallback((contentUri) => {
+  const audio = audioRef.current;
+  const playableSrc = Capacitor.convertFileSrc(contentUri);
+  audio.src = playableSrc;
+  audio.play().catch((err) => {
+    console.error('Play error:', err);
+    setError('Failed to play audio');
+  });
+  setIsPlaying(true);
+  setError(null);
+}, []);
 
   /**
    * Toggle play/pause
@@ -84,7 +86,7 @@ export const useAudioPlayer = () => {
           setError('Failed to play audio');
         });
       } else {
-        playAudio(currentSong.path);
+        playAudio(currentSong.contentUri);
       }
       setIsPlaying(true);
       setError(null);
@@ -100,7 +102,7 @@ export const useAudioPlayer = () => {
     setCurrentIndex(nextIndex);
     setCurrentTime(0);
     setIsPlaying(true);
-    playAudio(songs[nextIndex].path);
+    playAudio(songs[nextIndex].contentUri);
   }, [currentIndex, songs, playAudio]);
 
   /**
@@ -112,7 +114,7 @@ export const useAudioPlayer = () => {
     setCurrentIndex(prevIndex);
     setCurrentTime(0);
     setIsPlaying(true);
-    playAudio(songs[prevIndex].path);
+    playAudio(songs[prevIndex].contentUri);
   }, [currentIndex, songs, playAudio]);
 
   /**
@@ -123,7 +125,7 @@ export const useAudioPlayer = () => {
       if (index >= 0 && index < songs.length) {
         setCurrentIndex(index);
         setCurrentTime(0);
-        playAudio(songs[index].path);
+        playAudio(songs[index].contentUri);
         setIsPlaying(true);
       }
     },

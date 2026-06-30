@@ -860,3 +860,180 @@
     font-size: 0.85rem;
   }
 }
+
+/* ========== Songs Tab / Device Songs ========== */
+
+.songs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.songs-header h3 {
+  margin: 0;
+  border-bottom: none;
+}
+
+.songs-tabs {
+  display: flex;
+  gap: 0.4rem;
+  background: #f1f5f9;
+  border-radius: 0.75rem;
+  padding: 4px;
+}
+
+.songs-tab {
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.songs-tab.active {
+  background: white;
+  color: #6366f1;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
+
+.songs-tab:hover:not(.active) {
+  color: #334155;
+  background: rgba(255,255,255,0.6);
+}
+
+/* Device songs section inside the tab */
+.device-songs-section {
+  padding-top: 0.5rem;
+}
+
+.device-songs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.load-device-btn {
+  padding: 0.65rem 1.25rem;
+  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: all 0.25s ease;
+  box-shadow: 0 3px 10px rgba(99,102,241,0.3);
+  white-space: nowrap;
+}
+
+.load-device-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 14px rgba(99,102,241,0.4);
+}
+
+.device-reload-hint {
+  font-size: 0.8rem;
+  color: #b45309;
+  background: rgba(251,191,36,0.12);
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.4rem;
+  border-left: 3px solid #fbbf24;
+}
+
+.device-loaded-ok {
+  font-size: 0.82rem;
+  color: #166534;
+  background: rgba(34,197,94,0.1);
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.4rem;
+  border-left: 3px solid #22c55e;
+  font-weight: 600;
+}
+
+.device-loading {
+  font-size: 0.82rem;
+  color: #4338ca;
+  background: rgba(99,102,241,0.08);
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.4rem;
+  border-left: 3px solid #6366f1;
+}
+
+.empty-device-songs {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+}
+
+.empty-device-songs p {
+  font-size: 0.9rem;
+  max-width: 320px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* Device song table rows */
+.device-song-stale {
+  opacity: 0.6;
+}
+
+.device-badge {
+  display: inline-block;
+  margin-right: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.stale-label {
+  font-size: 0.75rem;
+  color: #ef4444;
+  margin-left: 0.35rem;
+  font-style: italic;
+}
+
+/* Guest notice when host plays a device song */
+.device-guest-notice {
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(99, 102, 241, 0.08);
+  border-left: 3px solid #6366f1;
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+  color: #4338ca;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .songs-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .songs-tabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .songs-tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  .device-songs-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .load-device-btn {
+    width: 100%;
+  }
+}

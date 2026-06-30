@@ -1,7 +1,7 @@
 {
   "appId": "com.music.app",
   "appName": "MusicApp",
-  "webDir": "www",
+  "webDir": "../frontend/dist",
   "server": {
     "androidScheme": "http",
     "cleartext": true

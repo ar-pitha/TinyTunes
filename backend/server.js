@@ -21,31 +21,64 @@ const server = http.createServer(app);
 //   "http://10.0.2.2:5173", // Android emulator accessing frontend dev server
 // ];
 
+// const allowedOrigins = [
+//   process.env.FRONTEND_URL || "https://tiny-tunes.vercel.app",
+
+//   "http://localhost:5173",
+//   "http://localhost:3000",
+//   "http://127.0.0.1:3000",
+
+//   // Capacitor
+//   "http://localhost",
+//   "https://localhost",
+//   "capacitor://localhost",
+// ];
+
+// const corsOptions = {
+//   origin: (origin, callback) => {
+//     if (!origin || allowedOrigins.includes(origin)) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error("Not allowed by CORS"));
+//     }
+//   },
+//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+//   credentials: true,
+// };
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "https://tiny-tunes.vercel.app",
-
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-
-  // Capacitor
+  process.env.FRONTEND_URL,
+  "https://tiny-tunes.vercel.app",
   "http://localhost",
-  "https://localhost",
   "capacitor://localhost",
+  "https://localhost",
+  "http://localhost:5173",
 ];
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  credentials: true,
-};
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow mobile apps, Postman, curl (no Origin header)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked Origin:", origin);
+
+      return callback(new Error(`Origin not allowed: ${origin}`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
+
 
 const io = new Server(server, {
   cors: {
@@ -56,8 +89,8 @@ const io = new Server(server, {
 });
 
 // Use cors package for Express routes and preflight requests
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
+// app.use(cors(corsOptions));
+// app.options(/.*/, cors(corsOptions));
 
 app.use(express.json());
 

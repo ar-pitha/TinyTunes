@@ -1,17 +1,9 @@
-// NOTE:
-// This plugin targets Capacitor 8.
-// Uses only READ_MEDIA_AUDIO since the manifest scopes
-// READ_EXTERNAL_STORAGE to maxSdkVersion 32 (Android 12 and below).
-// On API 33+ devices/emulators, READ_MEDIA_AUDIO alone is required.
-
 package com.music.app
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import androidx.core.content.ContextCompat
 import com.getcapacitor.*
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
@@ -25,34 +17,49 @@ import com.getcapacitor.annotation.PermissionCallback
             strings = [
                 Manifest.permission.READ_MEDIA_AUDIO
             ]
+        ),
+        Permission(
+            alias = "storage",
+            strings = [
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ]
         )
     ]
 )
 class MediastorePlugin : Plugin() {
 
+    private fun permissionAlias(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            "audio"
+        } else {
+            "storage"
+        }
+    }
+
     @PluginMethod
     fun checkPermission(call: PluginCall) {
         val obj = JSObject()
-        obj.put("granted", getPermissionState("audio") == PermissionState.GRANTED)
+        obj.put("granted", getPermissionState(permissionAlias()) == PermissionState.GRANTED)
         call.resolve(obj)
     }
 
     @PluginMethod
     fun requestPermission(call: PluginCall) {
-        if (getPermissionState("audio") == PermissionState.GRANTED) {
+        val alias = permissionAlias()
+        if (getPermissionState(alias) == PermissionState.GRANTED) {
             val obj = JSObject()
             obj.put("granted", true)
             call.resolve(obj)
             return
         }
 
-        requestPermissionForAlias("audio", call, "permissionCallback")
+        requestPermissionForAlias(alias, call, "permissionCallback")
     }
 
     @PermissionCallback
     private fun permissionCallback(call: PluginCall) {
         val obj = JSObject()
-        val granted = getPermissionState("audio") == PermissionState.GRANTED
+        val granted = getPermissionState(permissionAlias()) == PermissionState.GRANTED
         obj.put("granted", granted)
 
         if (granted) {
@@ -64,7 +71,7 @@ class MediastorePlugin : Plugin() {
 
     @PluginMethod
     fun getSongs(call: PluginCall) {
-        if (getPermissionState("audio") != PermissionState.GRANTED) {
+        if (getPermissionState(permissionAlias()) != PermissionState.GRANTED) {
             call.reject("Permission not granted")
             return
         }

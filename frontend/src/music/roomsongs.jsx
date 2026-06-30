@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { Capacitor } from '@capacitor/core';
+import { MusicService } from '../services/MusicService';
 import './roomsongs.css';
+
+// Helper: generate a stable device-song id from file metadata
+const makeDeviceSongId = (file) => `device-${file.name}-${file.size}-${file.lastModified}`;
+
+// Helper: resolve the best playable URL for a song object
+const resolveSongUrl = (song) => {
+  if (!song) return null;
+  // MediaStore/Capacitor native song
+  if (song.contentUri) return Capacitor.convertFileSrc(song.contentUri);
+  // Blob URL from manual file pick
+  if (song.source === 'device' && song.url) return song.url;
+  // Uploaded song
+  if (song._id) return `${import.meta.env.VITE_BACKEND_URL}/api/songs/${song._id}/stream`;
+  return null;
+};
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL;
 const API_ROOMS = `${API_BASE}/api/rooms`;
@@ -41,6 +58,11 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
   // allow guests to enable playback (user gesture) so audio.play() won't be blocked
   const [playbackEnabled, setPlaybackEnabled] = useState(false);
+
+  // Device songs state (local files picked by host)
+  const [deviceSongs, setDeviceSongs] = useState([]);
+  const [songTab, setSongTab] = useState('uploaded'); // 'uploaded' | 'device'
+  const deviceFileInputRef = useRef(null);
 
   const allSongsRef = useRef(allSongs);
   const isHostRef = useRef(isHost);
@@ -452,6 +474,92 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     }
   };
 
+  // Remove stale localStorage restore — MediaStore auto-loads on every mount
+  // (localStorage is still written for metadata display, but blob URLs are gone on refresh)
+
+  // Persist device song metadata to localStorage (no url/file - not serialisable)
+  useEffect(() => {
+    if (deviceSongs.length > 0) {
+      const meta = deviceSongs.map(({ id, title, artist, album, duration }) => ({ id, title, artist, album, duration }));
+      try { localStorage.setItem('room_device_songs_meta', JSON.stringify(meta)); } catch (e) {}
+    }
+  }, [deviceSongs]);
+
+  // ===== DEVICE SONGS: Auto-load from MediaStore (same as OfflineMusicPlayer) =====
+  const [deviceSongsLoading, setDeviceSongsLoading] = useState(false);
+  const [deviceSongsError, setDeviceSongsError] = useState('');
+
+  // Auto-fetch device songs on mount using the Capacitor MediaStore plugin
+  useEffect(() => {
+    const loadDeviceSongs = async () => {
+      setDeviceSongsLoading(true);
+      setDeviceSongsError('');
+      try {
+        const permissionGranted = await MusicService.requestPermission();
+        if (!permissionGranted) {
+          setDeviceSongsError('Permission denied. Allow storage access to load device songs.');
+          setDeviceSongsLoading(false);
+          return;
+        }
+        const songs = await MusicService.getSongs();
+        if (songs.length === 0) {
+          setDeviceSongsError('No songs found on device.');
+        } else {
+          // Map to our internal format, tagging as device source
+          setDeviceSongs(songs.map(s => ({
+            id: `device-${s.id}`,
+            _id: undefined,
+            title: s.title,
+            artist: s.artist,
+            album: s.album,
+            duration: s.duration,
+            contentUri: s.contentUri,
+            source: 'device',
+            needsReload: false,
+          })));
+        }
+      } catch (err) {
+        console.warn('MediaStore load error (expected on web/desktop):', err.message);
+        // Not an error on web — plugin only works on native Android/iOS
+        // Fall back to manual file pick (toolbar button)
+      } finally {
+        setDeviceSongsLoading(false);
+      }
+    };
+    loadDeviceSongs();
+  }, []);
+
+  // Handle host picking local audio files inside the room (web fallback)
+  const handleDeviceFileInput = (e) => {
+    const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/'));
+    if (!files.length) return;
+    const songs = files.map(file => ({
+      id: makeDeviceSongId(file),
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      artist: 'Device',
+      album: 'Device Music',
+      duration: 0,
+      source: 'device',
+      url: URL.createObjectURL(file),
+      file,
+      needsReload: false,
+    }));
+    setDeviceSongs(prev => {
+      // Merge: replace any stale entries with fresh urls
+      const merged = [...prev];
+      songs.forEach(s => {
+        const idx = merged.findIndex(x => x.id === s.id);
+        if (idx >= 0) merged[idx] = s;
+        else merged.push(s);
+      });
+      return merged;
+    });
+    // Switch to device tab automatically
+    setSongTab('device');
+    // reset input so user can re-pick the same files
+    e.target.value = '';
+  };
+
   const groupedByAlbum = React.useMemo(() => {
     return (allSongs || []).reduce((acc, s) => {
       const a = (s.album || '').trim() || 'Uncategorized';
@@ -490,14 +598,22 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         return;
       }
 
-      const serverTime = Date.now(); // Current server time
+      const serverTime = Date.now();
+      // For device songs, use song.id (not _id which is undefined)
+      const songId = currentSong ? (currentSong._id || currentSong.id || null) : null;
       const payload = {
-        currentSongId: currentSong?._id || null,
-        currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist } : null,
+        currentSongId: songId,
+        currentSong: currentSong ? {
+          _id: songId,
+          title: currentSong.title,
+          artist: currentSong.artist,
+          source: currentSong.source || 'uploaded',
+          // Don't send contentUri/url in payload — guests can't use it
+        } : null,
         currentTime: audioRef.current ? audioRef.current.currentTime : 0,
         isPlaying,
         queue: buildQueuePayload(queue),
-        serverTime, // Include server time for sync calculations
+        serverTime,
       };
 
       // Send via Socket.io EVERY update (fast, real-time)
@@ -555,6 +671,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       return;
     }
 
+    // Device songs are local to host — guests can't stream them
+    if (currentSong.source === 'device') {
+      audio.pause();
+      try { audio.removeAttribute('src'); audio.load(); setCurrentDuration(0); } catch (e) {}
+      return;
+    }
+
     const streamUrl = `${API_SONGS}/${currentSong._id}/stream`;
 
     // set crossOrigin and preload so metadata and range requests work reliably
@@ -574,6 +697,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       applyAudioSrc(streamUrl, isPlaying && playbackEnabled, resumeTime);
       return;
     }
+
 
     const trySyncTime = () => {
       try { if (typeof audio.duration === 'number' && !Number.isNaN(audio.duration)) setCurrentDuration(audio.duration); } catch (e) {}
@@ -638,7 +762,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     };
   }, [isHost, currentSong, isPlaying, lastSyncTimestamp, expectedTimeAtSync]);
 
-  // Host's local audio player
+  // Host's local audio player — uses resolveSongUrl to handle MediaStore, blob, and stream URLs
   useEffect(() => {
     if (!isHost) return;
     if (!audioRef.current) return;
@@ -649,8 +773,16 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       return;
     }
 
-    const streamUrl = `${API_SONGS}/${currentSong._id}/stream`;
-    const srcIncludesId = audioRef.current.src && String(audioRef.current.src).includes(currentSong._id);
+    // Resolve the correct URL: contentUri (Capacitor), blob URL, or stream URL
+    const streamUrl = resolveSongUrl(currentSong);
+    if (!streamUrl) {
+      console.warn('No playable URL for song:', currentSong.title, '— ContentUri missing or device blob expired');
+      return;
+    }
+
+    // Identify the song: use id (device) or _id (uploaded)
+    const songIdentifier = currentSong.source === 'device' ? currentSong.id : currentSong._id;
+    const srcIncludesId = audioRef.current.src && songIdentifier && String(audioRef.current.src).includes(String(songIdentifier));
     if (!srcIncludesId) {
       applyAudioSrc(streamUrl, isPlaying);
     }
@@ -702,7 +834,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
   // Host adds a song to the queue
   const addSongToQueue = (song) => {
     if (!isHost) return;
-    console.debug('addSongToQueue', song._id);
+    console.debug('addSongToQueue', song._id || song.id);
     setQueue(prev => {
       if (currentSong && currentSong._id) {
         playedStackRef.current.push(currentSong);
@@ -716,24 +848,25 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
          setCurrentSong(song);
          setIsPlaying(true);
          if (audioRef.current) {
-           applyAudioSrc(`${API_SONGS}/${song._id}/stream`, true);
+           const audioUrl = song.source === 'device' ? song.url : `${API_SONGS}/${song._id}/stream`;
+           if (audioUrl) applyAudioSrc(audioUrl, true);
          }
          const payload = {
-           currentSongId: song._id,
-           currentSong: { _id: song._id, title: song.title, artist: song.artist },
-           currentTime: audioRef.current ? audioRef.current.currentTime : 0,
+           currentSongId: song._id || song.id,
+           currentSong: { _id: song._id || song.id, title: song.title, artist: song.artist, source: song.source || 'uploaded' },
+           currentTime: 0,
            isPlaying: true,
-           queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist }))
+           queue: newQ.map(s => ({ _id: s._id || s.id, title: s.title, artist: s.artist, source: s.source || 'uploaded' }))
          };
          emitHostPlayback(payload);
          persistPlayback(payload);
        } else {
          const payload = {
            currentSongId: currentSong?._id || null,
-           currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist } : null,
+           currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist, source: currentSong.source || 'uploaded' } : null,
            currentTime: audioRef.current ? audioRef.current.currentTime : 0,
            isPlaying,
-           queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist }))
+           queue: newQ.map(s => ({ _id: s._id || s.id, title: s.title, artist: s.artist, source: s.source || 'uploaded' }))
          };
          emitHostPlayback(payload);
          persistPlayback(payload);
@@ -906,12 +1039,14 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     setCurrentSong(song);
     setIsPlaying(true);
     if (audioRef.current) {
-      applyAudioSrc(`${API_SONGS}/${song._id}/stream`, true);
+      // Device songs use their blob url; uploaded songs stream from backend
+      const audioUrl = song.source === 'device' ? song.url : `${API_SONGS}/${song._id}/stream`;
+      if (audioUrl) applyAudioSrc(audioUrl, true);
     }
     const payload = {
-      currentSongId: song._id,
-      currentSong: { _id: song._id, title: song.title, artist: song.artist },
-      currentTime: audioRef.current ? audioRef.current.currentTime : 0,
+      currentSongId: song._id || song.id,
+      currentSong: { _id: song._id || song.id, title: song.title, artist: song.artist, source: song.source || 'uploaded' },
+      currentTime: 0,
       isPlaying: true,
       queue: [],
     };
@@ -1176,8 +1311,17 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       {/* Now Playing Section */}
       {currentSong && (
         <div className="playback-info">
-          <div>🎶 Now Playing</div>
+          <div>
+            🎶 Now Playing
+            {currentSong.source === 'device' && <span className="device-badge" style={{ marginLeft: 6 }}>📱 Device Song</span>}
+          </div>
           <div>{currentSong.title} — {currentSong.artist}</div>
+          {/* Guest notice for device songs */}
+          {!isHost && currentSong.source === 'device' && (
+            <div className="device-guest-notice">
+              📡 Host is playing a local device song — audio not available on your device
+            </div>
+          )}
           <div className="playback-progress-container">
             <div className="playback-progress-wrapper">
               <div className="playback-progress-bar">
@@ -1201,6 +1345,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
           </div>
         </div>
       )}
+
 
       {/* Playback Controls */}
       <div className="controls">
@@ -1273,16 +1418,151 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
       {/* Songs Section */}
       <div className="songs">
-        <h3>🎵 Add Songs {isHost ? '(Host Controls)' : '(View Only)'}</h3>
-        {allSongsLoading && <div className="loading">Loading songs...</div>}
-        {allSongsError && <div className="error">{allSongsError}</div>}
-        
-        {Object.keys(groupedByAlbum).length > 0 ? (
-          Object.keys(groupedByAlbum).map(albumName => renderAlbumBlock(albumName, groupedByAlbum[albumName]))
-        ) : (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No songs available</div>
+        <div className="songs-header">
+          <h3>🎵 Add Songs {isHost ? '(Host Controls)' : '(View Only)'}</h3>
+          <div className="songs-tabs">
+            <button
+              className={`songs-tab ${songTab === 'uploaded' ? 'active' : ''}`}
+              onClick={() => setSongTab('uploaded')}
+            >
+              ☁️ Uploaded ({allSongs.length})
+            </button>
+            <button
+              className={`songs-tab ${songTab === 'device' ? 'active' : ''}`}
+              onClick={() => setSongTab('device')}
+            >
+              📱 Device ({deviceSongs.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Hidden file input for picking device songs */}
+        <input
+          ref={deviceFileInputRef}
+          type="file"
+          multiple
+          accept="audio/*"
+          style={{ display: 'none' }}
+          onChange={handleDeviceFileInput}
+        />
+
+        {/* Uploaded songs tab */}
+        {songTab === 'uploaded' && (
+          <>
+            {allSongsLoading && <div className="loading">Loading songs...</div>}
+            {allSongsError && <div className="error">{allSongsError}</div>}
+            {Object.keys(groupedByAlbum).length > 0 ? (
+              Object.keys(groupedByAlbum).map(albumName => renderAlbumBlock(albumName, groupedByAlbum[albumName]))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No uploaded songs available</div>
+            )}
+          </>
+        )}
+
+        {/* Device songs tab */}
+        {songTab === 'device' && (
+          <div className="device-songs-section">
+            {/* Toolbar: auto-load status + manual fallback */}
+            <div className="device-songs-toolbar">
+              {deviceSongsLoading ? (
+                <span className="device-loading">⏳ Loading device songs...</span>
+              ) : deviceSongsError ? (
+                <span className="device-reload-hint">⚠️ {deviceSongsError}</span>
+              ) : deviceSongs.length > 0 ? (
+                <span className="device-loaded-ok">✅ {deviceSongs.length} device songs loaded</span>
+              ) : null}
+
+              {/* Always show refresh/retry button */}
+              {isHost && (
+                <>
+                  <button
+                    className="load-device-btn"
+                    onClick={async () => {
+                      setDeviceSongsLoading(true);
+                      setDeviceSongsError('');
+                      try {
+                        const granted = await MusicService.requestPermission();
+                        if (!granted) { setDeviceSongsError('Permission denied.'); return; }
+                        const songs = await MusicService.getSongs();
+                        if (songs.length === 0) {
+                          setDeviceSongsError('No songs found on device.');
+                        } else {
+                          setDeviceSongs(songs.map(s => ({
+                            id: `device-${s.id}`,
+                            _id: undefined,
+                            title: s.title,
+                            artist: s.artist,
+                            album: s.album,
+                            duration: s.duration,
+                            contentUri: s.contentUri,
+                            source: 'device',
+                            needsReload: false,
+                          })));
+                        }
+                      } catch (err) {
+                        setDeviceSongsError('Plugin not available on web. Use file picker below.');
+                      } finally {
+                        setDeviceSongsLoading(false);
+                      }
+                    }}
+                    disabled={deviceSongsLoading}
+                  >
+                    🔄 {deviceSongsLoading ? 'Loading...' : 'Refresh Device Songs'}
+                  </button>
+
+                  {/* Web fallback: manual file picker */}
+                  <button
+                    className="load-device-btn"
+                    style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)' }}
+                    onClick={() => deviceFileInputRef.current && deviceFileInputRef.current.click()}
+                  >
+                    📂 Pick Files (Web)
+                  </button>
+                </>
+              )}
+            </div>
+
+            {deviceSongs.length === 0 && !deviceSongsLoading ? (
+              <div className="empty-device-songs">
+                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📱</div>
+                <p>
+                  {isHost
+                    ? 'Device songs will load automatically from your phone. On web, use "Pick Files" to select audio files.'
+                    : 'Host has not loaded any device songs yet.'}
+                </p>
+              </div>
+            ) : (
+              <div className="album-block">
+                <h3>Device Music ({deviceSongs.length} songs)</h3>
+                <table className="album-table">
+                  <tbody>
+                    {deviceSongs.map(s => (
+                      <tr key={s.id}>
+                        <td>
+                          <span className="device-badge">📱</span>
+                          {s.title}
+                          <span style={{ color: '#94a3b8', fontSize: '0.8em', marginLeft: 6 }}>{s.artist}</span>
+                        </td>
+                        <td>
+                          {isHost ? (
+                            <>
+                              <button onClick={() => playNow(s)}>Play Now</button>
+                              <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
+                            </>
+                          ) : (
+                            <button disabled>Host only</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
+
 
       {/* Host Controls */}
       {isHost && (
