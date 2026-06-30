@@ -1,116 +1,121 @@
-/**
- * Service to handle fetching songs from device storage
- * Integrates with the native MediaStorePlugin for Android
- * 
- * Note: Capacitor only works on native Android/iOS, not in browser
- */
+import { registerPlugin } from "@capacitor/core";
+
+// Register the native Capacitor plugin
+const Mediastore = registerPlugin("Mediastore");
+
 export class MusicService {
-  static MediaStore = null;
+  /**
+   * Check whether the native plugin is available
+   */
+  static isNativeAvailable() {
+    return !!Mediastore;
+  }
 
   /**
-   * Initialize Capacitor plugin (only on native platforms)
+   * Request storage/audio permission
    */
-  static async initCapacitor() {
-    if (this.MediaStore) return;
-    
+  static async requestPermission() {
     try {
-      // Only import Capacitor on native platforms
-      const { registerPlugin } = await import('@capacitor/core');
-      this.MediaStore = registerPlugin('MediaStore');
+      if (!this.isNativeAvailable()) {
+        throw new Error("MediaStore plugin is not available.");
+      }
+
+      const result = await Mediastore.requestPermission();
+
+      return result.granted === true;
     } catch (error) {
-      console.warn('Capacitor not available (running in browser)', error.message);
-      this.MediaStore = null;
+      console.error("Permission request failed:", error);
+      return false;
     }
   }
 
   /**
-   * Fetch all audio files from device storage
-   * Requires READ_MEDIA_AUDIO permission on Android 13+
-   *
-   * @returns {Promise<Array>} Array of song objects with title, artist, path, duration
+   * Check existing permission
    */
-  static async fetchSongs() {
+  static async checkPermission() {
     try {
-      await this.initCapacitor();
-      
-      if (!this.MediaStore) {
-        throw new Error('Capacitor not available - this feature only works on Android devices');
+      if (!this.isNativeAvailable()) {
+        throw new Error("MediaStore plugin is not available.");
       }
 
-      const result = await this.MediaStore.getSongs();
-      
-      // Filter out invalid entries and sort by title
-      const songs = (result.songs || [])
-        .filter((song) => song.path && song.title && song.duration > 0)
-        .map((song) => ({
-          ...song,
-          id: `${song.path}-${song.duration}`, // Unique ID based on path and duration
-          formattedDuration: MusicService.formatDuration(song.duration),
+      const result = await Mediastore.checkPermission();
+
+      return result.granted === true;
+    } catch (error) {
+      console.error("Permission check failed:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Read songs from Android MediaStore
+   */
+  static async getSongs() {
+    try {
+      if (!this.isNativeAvailable()) {
+        throw new Error("MediaStore plugin is not available.");
+      }
+
+      const granted = await this.checkPermission();
+
+      if (!granted) {
+        const permission = await this.requestPermission();
+
+        if (!permission) {
+          throw new Error("Storage permission denied.");
+        }
+      }
+
+      const result = await Mediastore.getSongs();
+
+      if (!result || !result.songs) {
+        return [];
+      }
+
+      return result.songs
+        .filter(song => song.contentUri)
+        .map(song => ({
+          id: song.id,
+          title: song.title || "Unknown",
+          artist: song.artist || "Unknown Artist",
+          album: song.album || "Unknown Album",
+          duration: song.duration || 0,
+          size: song.size || 0,
+          displayName: song.displayName || "",
+          contentUri: song.contentUri,
+          albumArtUri: song.albumArtUri || "",
+          formattedDuration: this.formatDuration(song.duration || 0),
         }))
         .sort((a, b) => a.title.localeCompare(b.title));
 
-      return songs;
     } catch (error) {
-      console.error('Error fetching songs:', error);
-      throw new Error('Failed to fetch songs from device');
+      console.error("MediaStore Error:", error);
+      throw error;
     }
   }
 
   /**
-   * Format duration from milliseconds to MM:SS format
-   *
-   * @param {number} ms - Duration in milliseconds
-   * @returns {string} Formatted duration (e.g., "3:45")
+   * Format milliseconds into MM:SS
    */
-  static formatDuration(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
+  static formatDuration(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   }
 
   /**
-   * Format time from seconds to MM:SS format
-   *
-   * @param {number} seconds - Time in seconds
-   * @returns {string} Formatted time (e.g., "2:15")
+   * Format seconds into MM:SS
    */
   static formatTime(seconds) {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Request READ_MEDIA_AUDIO permission on Android 13+
-   * On older versions, READ_EXTERNAL_STORAGE is declared in manifest
-   *
-   * @returns {Promise<boolean>} True if permission is granted
-   */
-  static async requestMusicPermission() {
-    try {
-      const { permissions } = await import('@capacitor/core');
-      const androidPermissions = await permissions.query({
-        name: 'READ_MEDIA_AUDIO',
-      });
-
-      if (androidPermissions.state === 'granted') {
-        return true;
-      }
-
-      if (androidPermissions.state === 'prompt-with-rationale') {
-        const result = await permissions.requestPermissions({
-          permissions: ['READ_MEDIA_AUDIO'],
-        });
-        return result.permissions[0].state === 'granted';
-      }
-
-      return false;
-    } catch (error) {
-      console.warn('Permission handling error:', error);
-      // If permission API is not available, assume granted (permission is in manifest)
-      return true;
+    if (!seconds || isNaN(seconds)) {
+      return "0:00";
     }
+
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
   }
 }

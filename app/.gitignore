@@ -1,0 +1,24 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated Capacitor files
+www/
+
+# Android build outputs
+android/.gradle/
+android/app/build/
+android/build/
+android/captitor/captator-android-plugins/build/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

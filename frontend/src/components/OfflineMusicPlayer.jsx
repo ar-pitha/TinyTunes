@@ -42,7 +42,7 @@ const OfflineMusicPlayer = () => {
       try {
         // Request permission
         const permissionGranted =
-          await MusicService.requestMusicPermission();
+          await MusicService.requestPermission();
 
         if (!permissionGranted) {
           player.setError(
@@ -53,7 +53,7 @@ const OfflineMusicPlayer = () => {
         }
 
         // Fetch songs from device
-        const songs = await MusicService.fetchSongs();
+        const songs = await MusicService.getSongs();
 
         if (songs.length === 0) {
           player.setError('No songs found on device');
@@ -96,17 +96,18 @@ const OfflineMusicPlayer = () => {
 
       {/* Error State */}
       {player.error && !player.loading && (
-        <div className="bg-red-900 border border-red-700 rounded-lg p-4 mb-6 flex items-start gap-3">
+        <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-semibold mb-1">Error</h3>
-            <p className="text-sm text-gray-200">{player.error}</p>
-            {player.error.includes('browser') && (
-              <p className="text-xs text-gray-300 mt-2 italic">
-                💡 Tip: This feature only works on Android devices or emulators. 
-                Build the APK and install it on your device to use the offline music player.
-              </p>
-            )}
+            <h3 className="font-semibold mb-1">ℹ️ Offline Player Not Available</h3>
+            <p className="text-sm text-gray-200 mb-3">{player.error}</p>
+            <p className="text-xs text-gray-300 italic mb-3">
+              The offline music player requires a native Android plugin that hasn't been installed yet.
+            </p>
+            <p className="text-xs bg-blue-800 p-2 rounded">
+              💡 <strong>Alternative:</strong> Use the{' '}
+              <a href="/songmanager" className="text-blue-300 hover:text-blue-200 underline">Song Manager</a> to upload and play music from the server.
+            </p>
           </div>
         </div>
       )}

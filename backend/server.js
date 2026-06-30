@@ -12,13 +12,26 @@ const Grid = require("gridfs-stream");
 const app = express();
 const server = http.createServer(app);
 
+// const allowedOrigins = [
+//   process.env.FRONTEND_URL || "https://tiny-tunes.vercel.app",
+//   "http://localhost:5173",
+//   "http://localhost:3000",
+//   "http://127.0.0.1:3000",
+//   "http://10.0.2.2:3001",
+//   "http://10.0.2.2:5173", // Android emulator accessing frontend dev server
+// ];
+
 const allowedOrigins = [
   process.env.FRONTEND_URL || "https://tiny-tunes.vercel.app",
+
   "http://localhost:5173",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "http://10.0.2.2:3001",
-  "http://10.0.2.2:5173", // Android emulator accessing frontend dev server
+
+  // Capacitor
+  "http://localhost",
+  "https://localhost",
+  "capacitor://localhost",
 ];
 
 const corsOptions = {
@@ -220,6 +233,8 @@ io.on("connection", (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 // Export for testing or reuse
