@@ -127,6 +127,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   const [songTab, setSongTab] = useState('uploaded'); // 'uploaded' | 'device'
   const deviceFileInputRef = useRef(null);
 
+  // Upload tracking state: maps contentUri to { status: 'uploading'|'done'|'error', progress: 0-100, message: '' }
+  const [uploadingDeviceSongs, setUploadingDeviceSongs] = useState({});
+
   const allSongsRef = useRef(allSongs);
   const isHostRef = useRef(isHost);
   const audioRef = useRef(null);
@@ -1019,22 +1022,42 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   // Helper: upload a device song to the backend and return a server song object
   const uploadDeviceSong = async (song) => {
+    const uploadKey = song.contentUri; // Use contentUri as unique key for this upload
+    
     try {
-      // Show loading message
-      setError('Uploading device song...');
+      // Mark as uploading
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'uploading', progress: 10, message: 'Uploading device song...' }
+      }));
+      setError('Uploading device song: ' + (song.title || 'Unknown'));
 
       // Read the device song as base64
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'uploading', progress: 30, message: 'Reading file...' }
+      }));
       const { base64, mimeType } = await MusicService.readSongAsBase64(song.contentUri);
+      console.log('Song read successfully, base64 length:', base64.length, 'mimeType:', mimeType);
 
       // Convert base64 to Blob
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'uploading', progress: 50, message: 'Converting file...' }
+      }));
       const binaryString = atob(base64);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
       const blob = new Blob([bytes], { type: mimeType });
+      console.log('Blob created, size:', blob.size, 'bytes');
 
       // Create FormData for multipart/form-data upload
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'uploading', progress: 70, message: 'Uploading to server...' }
+      }));
       const formData = new FormData();
       formData.append('file', blob, `${song.title}.mp3`);
       formData.append('title', song.title || 'Unknown');
@@ -1042,6 +1065,14 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       formData.append('album', song.album || 'Unknown Album');
       formData.append('duration', Math.floor(song.duration / 1000)); // Convert ms to seconds
       formData.append('folder', 'device-uploads');
+
+      console.log('Uploading with metadata:', {
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        duration: Math.floor(song.duration / 1000),
+        fileSize: blob.size
+      });
 
       // Upload to backend
       const response = await fetch(`${API_SONGS}/upload`, {
@@ -1054,23 +1085,58 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Upload failed with status ${response.status}`);
+        const errorMsg = errorData.message || `Upload failed with status ${response.status}`;
+        console.error('Upload failed:', errorMsg, errorData);
+        throw new Error(errorMsg);
       }
 
       const uploadedSong = await response.json();
+      console.log('Upload response:', uploadedSong);
 
-      // Clear the loading message
-      setError('');
+      if (!uploadedSong || !uploadedSong._id) {
+        console.error('Invalid upload response - missing _id:', uploadedSong);
+        throw new Error('Server returned invalid response - missing song ID');
+      }
 
-      // Return the uploaded song with source marked as 'uploaded'
-      return {
-        ...uploadedSong,
+      // Ensure all required fields are present
+      const normalizedSong = {
+        _id: uploadedSong._id,
+        title: uploadedSong.title || song.title || 'Unknown',
+        artist: uploadedSong.artist || song.artist || 'Unknown Artist',
+        album: uploadedSong.album || song.album || 'Unknown Album',
+        duration: uploadedSong.duration || Math.floor(song.duration / 1000),
         source: 'uploaded'
       };
+
+      console.log('Normalized uploaded song:', normalizedSong);
+
+      // Mark upload as done
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'done', progress: 100, message: 'Upload complete!' }
+      }));
+
+      // Clear error after a short delay
+      setTimeout(() => {
+        setError('');
+        setUploadingDeviceSongs(prev => {
+          const updated = { ...prev };
+          delete updated[uploadKey];
+          return updated;
+        });
+      }, 1500);
+
+      return normalizedSong;
     } catch (error) {
       console.error('uploadDeviceSong error:', error);
       const errorMsg = `Failed to upload device song: ${error.message}`;
       setError(errorMsg);
+      
+      setUploadingDeviceSongs(prev => ({
+        ...prev,
+        [uploadKey]: { status: 'error', progress: 0, message: errorMsg }
+      }));
+      
       throw error;
     }
   };
@@ -1091,7 +1157,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       }
     }
     
-    console.debug('addSongToQueue', songToAdd._id || songToAdd.id);
+    console.debug('addSongToQueue', songToAdd._id || songToAdd.id, songToAdd);
     setQueue(prev => {
       if (currentSong && currentSong._id) {
         playedStackRef.current.push(currentSong);
@@ -1101,6 +1167,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       try {
         sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ));
       } catch (e) {}
+      
       if (!currentSong) {
         setCurrentSong(songToAdd);
         setIsPlaying(true);
@@ -1108,23 +1175,60 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           const audioUrl = `${API_SONGS}/${songToAdd._id}/stream`;
           if (audioUrl) applyAudioSrc(audioUrl, true);
         }
+        
+        // Build full queue payload with complete song info
+        const queuePayload = newQ.map(s => ({
+          _id: s._id,
+          title: s.title || 'Unknown',
+          artist: s.artist || 'Unknown Artist',
+          album: s.album || 'Unknown Album',
+          duration: s.duration || 0,
+          source: 'uploaded'
+        }));
+        
         const payload = {
           currentSongId: songToAdd._id,
-          currentSong: { _id: songToAdd._id, title: songToAdd.title, artist: songToAdd.artist, source: 'uploaded' },
+          currentSong: {
+            _id: songToAdd._id,
+            title: songToAdd.title || 'Unknown',
+            artist: songToAdd.artist || 'Unknown Artist',
+            album: songToAdd.album || 'Unknown Album',
+            duration: songToAdd.duration || 0,
+            source: 'uploaded'
+          },
           currentTime: 0,
           isPlaying: true,
-          queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist, source: 'uploaded' }))
+          queue: queuePayload
         };
+        console.log('Broadcast payload (empty queue start):', payload);
         emitHostPlayback(payload);
         persistPlayback(payload);
       } else {
+        // Build full queue payload with complete song info
+        const queuePayload = newQ.map(s => ({
+          _id: s._id,
+          title: s.title || 'Unknown',
+          artist: s.artist || 'Unknown Artist',
+          album: s.album || 'Unknown Album',
+          duration: s.duration || 0,
+          source: 'uploaded'
+        }));
+        
         const payload = {
           currentSongId: currentSong?._id || null,
-          currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist, source: currentSong.source || 'uploaded' } : null,
+          currentSong: currentSong ? {
+            _id: currentSong._id,
+            title: currentSong.title || 'Unknown',
+            artist: currentSong.artist || 'Unknown Artist',
+            album: currentSong.album || 'Unknown Album',
+            duration: currentSong.duration || 0,
+            source: currentSong.source || 'uploaded'
+          } : null,
           currentTime: audioRef.current ? audioRef.current.currentTime : 0,
           isPlaying,
-          queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist, source: 'uploaded' }))
+          queue: queuePayload
         };
+        console.log('Broadcast payload (add to queue):', payload);
         emitHostPlayback(payload);
         persistPlayback(payload);
       }
@@ -1359,15 +1463,25 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     setIsPlaying(true);
     if (audioRef.current) {
       const audioUrl = `${API_SONGS}/${songToPlay._id}/stream`;
+      console.log('Playing song:', songToPlay._id, 'URL:', audioUrl);
       if (audioUrl) applyAudioSrc(audioUrl, true);
     }
+    
     const payload = {
       currentSongId: songToPlay._id,
-      currentSong: { _id: songToPlay._id, title: songToPlay.title, artist: songToPlay.artist, source: 'uploaded' },
+      currentSong: {
+        _id: songToPlay._id,
+        title: songToPlay.title || 'Unknown',
+        artist: songToPlay.artist || 'Unknown Artist',
+        album: songToPlay.album || 'Unknown Album',
+        duration: songToPlay.duration || 0,
+        source: 'uploaded'
+      },
       currentTime: 0,
       isPlaying: true,
       queue: [],
     };
+    console.log('Broadcast payload (play now):', payload);
     emitHostPlayback(payload);
     persistPlayback(payload);
   };
@@ -1552,7 +1666,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     // device songs
     deviceSongs, songTab, setSongTab, deviceFileInputRef,
-    deviceSongsLoading, deviceSongsError,
+    deviceSongsLoading, deviceSongsError, uploadingDeviceSongs,
 
     // album UI state
     albumExpanded, setAlbumExpanded,

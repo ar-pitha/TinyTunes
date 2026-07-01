@@ -19,7 +19,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
     // device songs
     deviceSongs, songTab, setSongTab, deviceFileInputRef,
-    deviceSongsLoading, deviceSongsError,
+    deviceSongsLoading, deviceSongsError, uploadingDeviceSongs,
 
     // album UI state
     albumExpanded, setAlbumExpanded,
@@ -361,27 +361,54 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
             ) : (
               <div className="album-block">
                 <h3>Device Music ({deviceSongs.length} songs)</h3>
+                {Object.keys(uploadingDeviceSongs).length > 0 && (
+                  <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#f0f9ff', borderRadius: '4px', borderLeft: '4px solid #3b82f6' }}>
+                    {Object.entries(uploadingDeviceSongs).map(([contentUri, status]) => (
+                      <div key={contentUri} style={{ marginBottom: '8px' }}>
+                        <div style={{ fontSize: '0.9em', fontWeight: 'bold' }}>{status.message}</div>
+                        <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginTop: '4px' }}>
+                          <div style={{
+                            width: `${status.progress}%`,
+                            height: '100%',
+                            backgroundColor: status.status === 'error' ? '#ef4444' : status.status === 'done' ? '#10b981' : '#3b82f6',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <table className="album-table">
                   <tbody>
-                    {deviceSongs.map(s => (
-                      <tr key={s.id}>
-                        <td>
-                          <span className="device-badge">📱</span>
-                          {s.title}
-                          <span style={{ color: '#94a3b8', fontSize: '0.8em', marginLeft: 6 }}>{s.artist}</span>
-                        </td>
-                        <td>
-                          {isHost ? (
-                            <>
-                              <button onClick={() => playNow(s)}>Play Now</button>
-                              <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
-                            </>
-                          ) : (
-                            <button disabled>Host only</button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {deviceSongs.map(s => {
+                      const uploadStatus = uploadingDeviceSongs[s.contentUri];
+                      return (
+                        <tr key={s.id} style={{ opacity: uploadStatus ? 0.6 : 1 }}>
+                          <td>
+                            <span className="device-badge">📱</span>
+                            {s.title}
+                            <span style={{ color: '#94a3b8', fontSize: '0.8em', marginLeft: 6 }}>{s.artist}</span>
+                            {uploadStatus && (
+                              <span style={{ marginLeft: '8px', fontSize: '0.85em', color: uploadStatus.status === 'error' ? '#ef4444' : '#3b82f6' }}>
+                                {uploadStatus.status === 'uploading' && '⏳ Uploading...'}
+                                {uploadStatus.status === 'done' && '✅ Done'}
+                                {uploadStatus.status === 'error' && '❌ Error'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {isHost ? (
+                              <>
+                                <button onClick={() => playNow(s)} disabled={!!uploadStatus}>Play Now</button>
+                                <button onClick={() => addSongToQueue(s)} disabled={!!uploadStatus}>Add to Queue</button>
+                              </>
+                            ) : (
+                              <button disabled>Host only</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
