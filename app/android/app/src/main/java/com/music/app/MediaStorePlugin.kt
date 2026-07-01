@@ -132,4 +132,41 @@ class MediastorePlugin : Plugin() {
         result.put("songs", songs)
         call.resolve(result)
     }
+
+    @PluginMethod
+    fun readSong(call: PluginCall) {
+        if (getPermissionState(permissionAlias()) != PermissionState.GRANTED) {
+            call.reject("Permission not granted")
+            return
+        }
+
+        val contentUriString = call.getString("contentUri")
+        if (contentUriString == null) {
+            call.reject("contentUri is required")
+            return
+        }
+
+        try {
+            val uri = Uri.parse(contentUriString)
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: throw Exception("Failed to open input stream for URI: $contentUriString")
+
+            // Read all bytes from the input stream
+            val bytes = inputStream.use { it.readBytes() }
+            inputStream.close()
+
+            // Encode to base64
+            val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+
+            // Determine MIME type
+            val mimeType = context.contentResolver.getType(uri) ?: "audio/mpeg"
+
+            val result = JSObject()
+            result.put("base64", base64)
+            result.put("mimeType", mimeType)
+            call.resolve(result)
+        } catch (e: Exception) {
+            call.reject("Failed to read song: ${e.message}")
+        }
+    }
 }

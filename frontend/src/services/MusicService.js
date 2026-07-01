@@ -118,4 +118,35 @@ export class MusicService {
 
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   }
+
+  /**
+   * Read a song file as base64 from a contentUri using the native plugin
+   * @param {string} contentUri - The content URI of the song
+   * @returns {Promise<{base64: string, mimeType: string}>}
+   */
+  static async readSongAsBase64(contentUri) {
+    try {
+      if (!this.isNativeAvailable()) {
+        throw new Error("MediaStore plugin is not available.");
+      }
+
+      if (!contentUri) {
+        throw new Error("contentUri is required.");
+      }
+
+      const result = await Mediastore.readSong({ contentUri });
+
+      if (!result || !result.base64) {
+        throw new Error("Failed to read song file.");
+      }
+
+      return {
+        base64: result.base64,
+        mimeType: result.mimeType || "audio/mpeg"
+      };
+    } catch (error) {
+      console.error("readSongAsBase64 error:", error);
+      throw error;
+    }
+  }
 }

@@ -1017,32 +1017,103 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     }
   };
 
+  // Helper: upload a device song to the backend and return a server song object
+  const uploadDeviceSong = async (song) => {
+    try {
+      // Show loading message
+      setError('Uploading device song...');
+
+      // Read the device song as base64
+      const { base64, mimeType } = await MusicService.readSongAsBase64(song.contentUri);
+
+      // Convert base64 to Blob
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: mimeType });
+
+      // Create FormData for multipart/form-data upload
+      const formData = new FormData();
+      formData.append('file', blob, `${song.title}.mp3`);
+      formData.append('title', song.title || 'Unknown');
+      formData.append('artist', song.artist || 'Unknown Artist');
+      formData.append('album', song.album || 'Unknown Album');
+      formData.append('duration', Math.floor(song.duration / 1000)); // Convert ms to seconds
+      formData.append('folder', 'device-uploads');
+
+      // Upload to backend
+      const response = await fetch(`${API_SONGS}/upload`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Upload failed with status ${response.status}`);
+      }
+
+      const uploadedSong = await response.json();
+
+      // Clear the loading message
+      setError('');
+
+      // Return the uploaded song with source marked as 'uploaded'
+      return {
+        ...uploadedSong,
+        source: 'uploaded'
+      };
+    } catch (error) {
+      console.error('uploadDeviceSong error:', error);
+      const errorMsg = `Failed to upload device song: ${error.message}`;
+      setError(errorMsg);
+      throw error;
+    }
+  };
+
   // Host adds a song to the queue
-  const addSongToQueue = (song) => {
+  const addSongToQueue = async (song) => {
     if (!isHost) return;
-    console.debug('addSongToQueue', song._id || song.id);
+    
+    let songToAdd = song;
+    
+    // If it's a device song, upload it first
+    if (song.source === 'device') {
+      try {
+        songToAdd = await uploadDeviceSong(song);
+      } catch (error) {
+        console.error('Failed to upload device song, aborting add to queue');
+        return;
+      }
+    }
+    
+    console.debug('addSongToQueue', songToAdd._id || songToAdd.id);
     setQueue(prev => {
       if (currentSong && currentSong._id) {
         playedStackRef.current.push(currentSong);
       }
-      const newQ = [...prev, song];
+      const newQ = [...prev, songToAdd];
       // Cache queue in sessionStorage so it persists across refreshes
       try {
         sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ));
       } catch (e) {}
       if (!currentSong) {
-        setCurrentSong(song);
+        setCurrentSong(songToAdd);
         setIsPlaying(true);
         if (audioRef.current) {
-          const audioUrl = song.source === 'device' ? song.url : `${API_SONGS}/${song._id}/stream`;
+          const audioUrl = `${API_SONGS}/${songToAdd._id}/stream`;
           if (audioUrl) applyAudioSrc(audioUrl, true);
         }
         const payload = {
-          currentSongId: song._id || song.id,
-          currentSong: { _id: song._id || song.id, title: song.title, artist: song.artist, source: song.source || 'uploaded' },
+          currentSongId: songToAdd._id,
+          currentSong: { _id: songToAdd._id, title: songToAdd.title, artist: songToAdd.artist, source: 'uploaded' },
           currentTime: 0,
           isPlaying: true,
-          queue: newQ.map(s => ({ _id: s._id || s.id, title: s.title, artist: s.artist, source: s.source || 'uploaded' }))
+          queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist, source: 'uploaded' }))
         };
         emitHostPlayback(payload);
         persistPlayback(payload);
@@ -1052,7 +1123,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist, source: currentSong.source || 'uploaded' } : null,
           currentTime: audioRef.current ? audioRef.current.currentTime : 0,
           isPlaying,
-          queue: newQ.map(s => ({ _id: s._id || s.id, title: s.title, artist: s.artist, source: s.source || 'uploaded' }))
+          queue: newQ.map(s => ({ _id: s._id, title: s.title, artist: s.artist, source: 'uploaded' }))
         };
         emitHostPlayback(payload);
         persistPlayback(payload);
@@ -1265,22 +1336,34 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   };
 
   // Host: play now
-  const playNow = (song) => {
+  const playNow = async (song) => {
     if (!isHost) return;
+    
+    let songToPlay = song;
+    
+    // If it's a device song, upload it first
+    if (song.source === 'device') {
+      try {
+        songToPlay = await uploadDeviceSong(song);
+      } catch (error) {
+        console.error('Failed to upload device song, aborting play now');
+        return;
+      }
+    }
+    
     if (currentSong && currentSong._id) {
       playedStackRef.current.push(currentSong);
     }
     setQueue([]);
-    setCurrentSong(song);
+    setCurrentSong(songToPlay);
     setIsPlaying(true);
     if (audioRef.current) {
-      // Device songs use their blob url; uploaded songs stream from backend
-      const audioUrl = song.source === 'device' ? song.url : `${API_SONGS}/${song._id}/stream`;
+      const audioUrl = `${API_SONGS}/${songToPlay._id}/stream`;
       if (audioUrl) applyAudioSrc(audioUrl, true);
     }
     const payload = {
-      currentSongId: song._id || song.id,
-      currentSong: { _id: song._id || song.id, title: song.title, artist: song.artist, source: song.source || 'uploaded' },
+      currentSongId: songToPlay._id,
+      currentSong: { _id: songToPlay._id, title: songToPlay.title, artist: songToPlay.artist, source: 'uploaded' },
       currentTime: 0,
       isPlaying: true,
       queue: [],
