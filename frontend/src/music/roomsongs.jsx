@@ -87,45 +87,58 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
   // Render album block
   const renderAlbumBlock = (albumName, list) => {
-    const LIMIT = 100;
     const expanded = !!albumExpanded[albumName];
-    const visible = expanded ? list : list.slice(0, LIMIT);
+    const songCount = list.length;
 
     return (
       <div key={albumName} className="album-block">
-        <div
+        <button
+          type="button"
           className="album-header"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%',
+            cursor: 'pointer',
+            background: 'transparent',
+            border: 'none',
+            padding: '0',
+            textAlign: 'left'
+          }}
           onClick={() => setAlbumExpanded(prev => ({ ...prev, [albumName]: !prev[albumName] }))}
         >
-          <h3 style={{ margin: 0 }}>{albumName}</h3>
-          <span style={{ fontSize: '0.95rem', color: '#666' }}>{expanded ? '▼' : '▶'}</span>
-        </div>
-        <table className="album-table">
-          <tbody>
-            {visible.map(s => (
-              <tr key={s._id || s.id}>
-                <td>{s.title} - {s.artist}</td>
-                <td>
-                  {isHost ? (
-                    <>
-                      <button onClick={() => playNow(s)}>Play Now</button>
-                      <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
-                    </>
-                  ) : (
-                    <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {list.length > LIMIT && (
-          <div className="album-show-more">
-            <button onClick={() => setAlbumExpanded(prev => ({ ...prev, [albumName]: !prev[albumName] }))}>
-              {expanded ? `Show less (${list.length})` : `Show more (${list.length - LIMIT})`}
-            </button>
+          <div>
+            <h3 style={{ margin: 0 }}>{albumName}</h3>
+            <div style={{ color: '#64748b', fontSize: '0.9em', marginTop: 4 }}>
+              {songCount} song{songCount === 1 ? '' : 's'}
+            </div>
           </div>
+          <span style={{ fontSize: '1.1rem', color: '#666' }}>{expanded ? '▼' : '▶'}</span>
+        </button>
+        {expanded && (
+          <table className="album-table" style={{ marginTop: 12 }}>
+            <tbody>
+              {list.map(s => (
+                <tr key={s._id || s.id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{cleanTitle(s.title)}</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.9em', marginTop: 4 }}>{s.album}</div>
+                  </td>
+                  <td>
+                    {isHost ? (
+                      <>
+                        <button onClick={() => playNow(s)}>Play Now</button>
+                        <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
+                      </>
+                    ) : (
+                      <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     );

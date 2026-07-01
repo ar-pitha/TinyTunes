@@ -1433,16 +1433,29 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       (async () => {
         try {
           const uploaded = await uploadDeviceSong(song);
-          // Update queue/currentSong to uploaded version
-          setQueue([]);
-          setCurrentSong(prev => (prev && prev.id === song.id) ? { ...prev, ...uploaded } : uploaded);
-          // Broadcast updated playback state so guests can stream
+          setQueue(prev => {
+            const replaced = prev.map(q => {
+              if (q && q.id && song.id && q.id === song.id) return uploaded;
+              return q;
+            });
+            try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(replaced)); } catch (e) {}
+            return replaced;
+          });
+          setCurrentSong(prev => (prev && prev.id === song.id) ? { ...prev, ...uploaded } : prev);
+
           const payload = {
             currentSongId: uploaded._id,
-            currentSong: { _id: uploaded._id, title: uploaded.title, artist: uploaded.artist, album: uploaded.album, duration: uploaded.duration },
+            currentSong: {
+              _id: uploaded._id,
+              title: uploaded.title,
+              artist: uploaded.artist,
+              album: uploaded.album,
+              duration: uploaded.duration,
+              source: 'uploaded'
+            },
             currentTime: audioRef.current ? audioRef.current.currentTime : 0,
             isPlaying,
-            queue: []
+            queue: buildQueuePayload([])
           };
           emitHostPlayback(payload);
           persistPlayback(payload);
@@ -1459,27 +1472,30 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     setQueue([]);
     setCurrentSong(songToPlay);
     setIsPlaying(true);
-    if (audioRef.current && !isDevice) {
-      const audioUrl = `${API_SONGS}/${songToPlay._id}/stream`;
-      console.log('Playing song:', songToPlay._id, 'URL:', audioUrl);
-      if (audioUrl) applyAudioSrc(audioUrl, true);
+    if (audioRef.current) {
+      if (isDevice) {
+        const localUrl = resolveSongUrl(songToPlay);
+        if (localUrl) applyAudioSrc(localUrl, true);
+      } else {
+        const audioUrl = `${API_SONGS}/${songToPlay._id}/stream`;
+        if (audioUrl) applyAudioSrc(audioUrl, true);
+      }
     }
-    
+
     const payload = {
-      currentSongId: songToPlay._id,
+      currentSongId: isDevice ? songToPlay.id : songToPlay._id,
       currentSong: {
-        _id: songToPlay._id,
+        _id: isDevice ? songToPlay.id : songToPlay._id,
         title: songToPlay.title || 'Unknown',
         artist: songToPlay.artist || 'Unknown Artist',
         album: songToPlay.album || 'Unknown Album',
         duration: songToPlay.duration || 0,
-        source: 'uploaded'
+        source: isDevice ? 'device' : 'uploaded'
       },
       currentTime: 0,
       isPlaying: true,
       queue: [],
     };
-    console.log('Broadcast payload (play now):', payload);
     emitHostPlayback(payload);
     persistPlayback(payload);
   };
