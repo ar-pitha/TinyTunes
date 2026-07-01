@@ -252,7 +252,14 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
       // Don't auto-play - wait for user to click Play
       if (isPlaying && !isHost && !guestPausedRef.current) {
-        audio.play().catch(() => {});
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn('Initial play error:', err.name);
+            }
+          });
+        }
       }
     } catch (e) {
       console.warn('Error initializing audio on mount:', e);
@@ -860,8 +867,16 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (!Number.isNaN(currentTime) && Math.abs(audio.currentTime - currentTime) > 3) {
         try { audio.currentTime = currentTime; } catch (e) {}
       }
-      if (isPlaying) audio.play().catch(() => {});
-      else audio.pause();
+      if (isPlaying) {
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn('Sync play error:', err.name);
+            }
+          });
+        }
+      } else audio.pause();
     };
 
     if (isNaN(audio.duration) || audio.duration === 0) {
@@ -1252,7 +1267,16 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (newPlaying) {
       audioRef.current.crossOrigin = 'anonymous';
       audioRef.current.preload = 'metadata';
-      audioRef.current.play().catch((err) => { console.warn('play blocked', err); });
+      const playPromise = audioRef.current.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((err) => {
+          if (err.name === 'AbortError') {
+            console.debug('Play interrupted (expected when switching)');
+          } else {
+            console.warn('play blocked', err);
+          }
+        });
+      }
     } else {
       audioRef.current.pause();
     }
@@ -1293,10 +1317,17 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       guestPausedRef.current = false;
       setPlaybackError('');
       try { audio.currentTime = targetTime; audio.playbackRate = 1; } catch (e) {}
-      audio.play().catch((err) => {
-        console.warn('Guest resume playback blocked', err);
-        setPlaybackError('Playback was blocked by the browser. Tap Listen Live again.');
-      });
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((err) => {
+          if (err.name === 'AbortError') {
+            console.debug('Guest resume interrupted (expected)');
+          } else {
+            console.warn('Guest resume playback blocked', err);
+            setPlaybackError('Playback was blocked by the browser. Tap Listen Live again.');
+          }
+        });
+      }
       setGuestPaused(false);
     } else {
       audio.pause();
@@ -1317,6 +1348,14 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     setPlaybackError('');
     const audio = audioRef.current;
     if (!audio) return;
+    
+    // Ensure the audio element is ready before trying to play
+    if (audio.readyState < 2) { // HAVE_CURRENT_DATA = 2
+      console.warn('Audio not ready yet (readyState:', audio.readyState, ')');
+      setPlaybackError('Loading audio... please wait a moment and try again.');
+      return;
+    }
+    
     const now = Date.now() - (clockOffsetRef.current || 0);
     let targetTime = expectedTimeAtSync || 0;
     if (lastSyncTimestamp > 0 && isPlaying) {
@@ -1326,10 +1365,24 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (targetTime > 0) {
       try { audio.currentTime = targetTime; } catch (e) {}
     }
-    audio.play().catch((err) => {
-      console.warn('Guest playback activation blocked', err);
-      setPlaybackError('Playback was blocked by the browser. Please tap again.');
-    });
+    
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((err) => {
+        // Ignore AbortError — it's expected when interrupting a play during src change
+        if (err.name === 'AbortError') {
+          console.debug('Audio play interrupted (expected when switching tracks)');
+          return;
+        }
+        // For other errors, show a message
+        console.warn('Guest playback activation error:', err);
+        if (err.name === 'NotAllowedError') {
+          setPlaybackError('Playback blocked by browser. Please tap again.');
+        } else {
+          setPlaybackError(`Playback error: ${err.message}`);
+        }
+      });
+    }
   };
 
   // Update guest volume and apply it to the audio element
@@ -1497,9 +1550,24 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Helper to safely play audio and ignore AbortError (expected when src changes)
+    const safePlay = () => {
+      if (!shouldPlay) return;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((err) => {
+          if (err.name === 'AbortError') {
+            console.debug('Play interrupted by src change (expected)');
+          } else {
+            console.warn('Play error:', err.name, err.message);
+          }
+        });
+      }
+    };
+
     // clear when no url requested
     if (!url) {
-      try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
+      try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (e) {}
       audioPendingRef.current.src = null;
       if (audioPendingRef.current.listener) {
         try { audio.removeEventListener('canplay', audioPendingRef.current.listener); } catch (e) {}
@@ -1515,8 +1583,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         if (startTime > 0 && Math.abs(audio.currentTime - startTime) > 2) {
           try { audio.currentTime = startTime; } catch (e) {}
         }
-        if (shouldPlay) audio.play().catch(() => {});
-        else audio.pause();
+        if (shouldPlay) {
+          safePlay();
+        } else {
+          try { audio.pause(); } catch (e) {}
+        }
         return;
       }
     } catch (e) { /* ignore */ }
@@ -1526,6 +1597,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       try { audio.removeEventListener('canplay', audioPendingRef.current.listener); } catch (e) {}
       audioPendingRef.current.listener = null;
     }
+
+    // Pause any currently playing audio before switching src
+    try { audio.pause(); } catch (e) {}
 
     audioPendingRef.current.src = url;
     const onCanPlay = () => {
@@ -1539,7 +1613,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (startTime > 0) {
         try { audio.currentTime = startTime; } catch (e) {}
       }
-      if (shouldPlay) audio.play().catch(() => {});
+      safePlay();
       try { audio.removeEventListener('canplay', onCanPlay); } catch (e) {}
       audioPendingRef.current.listener = null;
     };
