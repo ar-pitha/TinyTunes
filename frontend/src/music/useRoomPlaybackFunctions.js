@@ -12,7 +12,10 @@ import {
   smoothSyncAudio,
   buildQueuePayload,
   resolveSongObj,
+  formatTime,
 } from './useRoomPlaybackImports';
+
+export { formatTime } from './useRoomPlaybackImports';
 
 /**
  * useRoomPlayback
