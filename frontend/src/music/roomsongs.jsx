@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRoomPlayback, formatTime } from './useRoomPlayback.jsx';
+import { useRoomPlayback, formatTime } from './useRoomPlaybackFunctions';
 import './roomsongs.css';
 
 const Room = ({ roomCode, onLeaveRoom, userId }) => {
