@@ -52,3 +52,4 @@ Thumbs.db
 *.apk
 *.aab
 *.ipa
+.early.coverage
