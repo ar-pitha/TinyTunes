@@ -1085,13 +1085,19 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMsg = errorData.message || `Upload failed with status ${response.status}`;
+        const errorMsg = errorData.error || errorData.message || `Upload failed with status ${response.status}`;
         console.error('Upload failed:', errorMsg, errorData);
         throw new Error(errorMsg);
       }
 
-      const uploadedSong = await response.json();
-      console.log('Upload response:', uploadedSong);
+      const responseData = await response.json();
+      console.log('Full upload response:', responseData);
+
+      // Backend returns { message, song: {...} } structure
+      // Extract the song object (handle both nested and flat structures)
+      let uploadedSong = responseData.song || responseData;
+      
+      console.log('Extracted uploadedSong:', uploadedSong);
 
       if (!uploadedSong || !uploadedSong._id) {
         console.error('Invalid upload response - missing _id:', uploadedSong);
