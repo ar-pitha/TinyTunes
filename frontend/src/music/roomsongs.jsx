@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRoomPlayback, formatTime } from './useRoomPlayback';
+import { useRoomPlayback, formatTime } from './useRoomPlayback.jsx';
 import './roomsongs.css';
 
 const Room = ({ roomCode, onLeaveRoom, userId }) => {
@@ -52,7 +52,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
   const DEVICE_ALBUM_PAGE_SIZE = 25;
   const DEVICE_SONG_PAGE_SIZE = 25;
   const [expandedDeviceAlbum, setExpandedDeviceAlbum] = React.useState(null);
-  // Uploaded albums pagination
+  // Uploaded albums pagination and search
+  const [uploadedSearch, setUploadedSearch] = React.useState('');
   const [uploadedAlbumPage, setUploadedAlbumPage] = React.useState(1);
   const UPLOADED_ALBUM_PAGE_SIZE = 25;
 
@@ -92,11 +93,18 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
     return (
       <div key={albumName} className="album-block">
-        <h3>{albumName}</h3>
+        <div
+          className="album-header"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          onClick={() => setAlbumExpanded(prev => ({ ...prev, [albumName]: !prev[albumName] }))}
+        >
+          <h3 style={{ margin: 0 }}>{albumName}</h3>
+          <span style={{ fontSize: '0.95rem', color: '#666' }}>{expanded ? '▼' : '▶'}</span>
+        </div>
         <table className="album-table">
           <tbody>
             {visible.map(s => (
-              <tr key={s._id}>
+              <tr key={s._id || s.id}>
                 <td>{s.title} - {s.artist}</td>
                 <td>
                   {isHost ? (
@@ -346,13 +354,39 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
             {allSongsError && <div className="error">{allSongsError}</div>}
             {Object.keys(groupedByAlbum).length > 0 ? (
               (() => {
-                const uploadedAlbumNames = Object.keys(groupedByAlbum || {});
-                const total = uploadedAlbumNames.length;
+                const uploadedAlbumNames = Object.keys(groupedByAlbum || {}).sort((a, b) => a.localeCompare(b));
+                const term = (uploadedSearch || '').trim().toLowerCase();
+                const filteredAlbums = uploadedAlbumNames.filter(albumName => {
+                  if (!term) return true;
+                  const albumMatch = albumName.toLowerCase().includes(term);
+                  if (albumMatch) return true;
+                  const list = groupedByAlbum[albumName] || [];
+                  return list.some(s => cleanTitle(s.title).toLowerCase().includes(term));
+                });
+                const total = filteredAlbums.length;
                 const start = (uploadedAlbumPage - 1) * UPLOADED_ALBUM_PAGE_SIZE;
-                const pageAlbums = uploadedAlbumNames.slice(start, start + UPLOADED_ALBUM_PAGE_SIZE);
+                const pageAlbums = filteredAlbums.slice(start, start + UPLOADED_ALBUM_PAGE_SIZE);
                 return (
                   <div>
-                    {pageAlbums.map(albumName => renderAlbumBlock(albumName, groupedByAlbum[albumName]))}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                      <input
+                        aria-label="Search uploaded songs"
+                        placeholder="Search songs or albums..."
+                        value={uploadedSearch}
+                        onChange={(e) => { setUploadedSearch(e.target.value); setUploadedAlbumPage(1); }}
+                        style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', minWidth: 240, flex: '1 1 auto' }}
+                      />
+                      <div style={{ color: '#4b5563', minWidth: 180 }}>
+                        {filteredAlbums.length} album{filteredAlbums.length === 1 ? '' : 's'} found
+                      </div>
+                    </div>
+                    {pageAlbums.length > 0 ? (
+                      pageAlbums.map(albumName => renderAlbumBlock(albumName, groupedByAlbum[albumName]))
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                        No uploaded songs match your search.
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
                       <button onClick={() => setUploadedAlbumPage(p => Math.max(1, p - 1))} disabled={uploadedAlbumPage <= 1}>Prev Albums</button>
                       <div style={{ alignSelf: 'center' }}>Album page {uploadedAlbumPage} of {Math.max(1, Math.ceil(total / UPLOADED_ALBUM_PAGE_SIZE))}</div>
