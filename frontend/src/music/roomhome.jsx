@@ -31,7 +31,8 @@ const Home = ({ onJoinRoom }) => {
       setError('Please log in first');
       return;
     }
-    if (!createCode.trim()) {
+    const normalizedCode = createCode.trim().toUpperCase();
+    if (!normalizedCode) {
       setError('Room code is required');
       return;
     }
@@ -44,7 +45,7 @@ const Home = ({ onJoinRoom }) => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          code: createCode.trim(),
+          code: normalizedCode,
           name: createName.trim(),
           isPrivate: createIsPrivate,
           password: createPassword,
@@ -57,7 +58,7 @@ const Home = ({ onJoinRoom }) => {
       }
       setSuccess('Room created successfully! Joining...');
       setTimeout(() => {
-        onJoinRoom(createCode.trim());
+        onJoinRoom(normalizedCode);
       }, 1500);
     } catch (err) {
       setError(err.message);
@@ -74,13 +75,14 @@ const Home = ({ onJoinRoom }) => {
       setError('Please log in first');
       return;
     }
-    if (!joinCode.trim()) {
+    const normalizedCode = joinCode.trim().toUpperCase();
+    if (!normalizedCode) {
       setError('Room code is required');
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_ROOMS}/${joinCode.trim()}/join`, {
+      const res = await fetch(`${API_ROOMS}/${normalizedCode}/join`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +96,7 @@ const Home = ({ onJoinRoom }) => {
       }
       setSuccess('Room joined successfully! Redirecting...');
       setTimeout(() => {
-        onJoinRoom(joinCode.trim());
+        onJoinRoom(normalizedCode);
       }, 1500);
     } catch (err) {
       setError(err.message);

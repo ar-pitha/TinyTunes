@@ -8,16 +8,17 @@ const authenticateToken = require('../middleware/auth'); // Your JWT middleware
 router.post('/create', authenticateToken, async (req, res) => {
   try {
     const { code, name, isPrivate, password, theme } = req.body;
+    const normalizedCode = String(code || '').trim().toUpperCase();
 
     // Check that the room code is unique
-    const existingRoom = await Room.findOne({ code });
+    const existingRoom = await Room.findOne({ code: normalizedCode });
     if (existingRoom) {
       return res.status(409).json({ error: 'Room code already exists' });
     }
 
     // Create new room with host as current user and user added to users array
     const newRoom = new Room({
-      code,
+      code: normalizedCode,
       name: name || '',
       host: req.user.id,
       isPrivate: isPrivate || false,
@@ -40,8 +41,9 @@ router.post('/create', authenticateToken, async (req, res) => {
 router.get('/:code', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
 
-    const room = await Room.findOne({ code })
+    const room = await Room.findOne({ code: normalizedCode })
       .populate('host', 'username email')
       .populate('users', 'username email')
       .populate('currentSong', 'title artist')
@@ -59,10 +61,11 @@ router.get('/:code', authenticateToken, async (req, res) => {
 router.post('/:code/join', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
     const { password } = req.body; // Password for private rooms (optional)
 
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     // If private, verify password
@@ -92,9 +95,10 @@ router.post('/:code/join', authenticateToken, async (req, res) => {
 router.post('/:code/leave', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
 
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     if (!room.users.some(id => id.toString() === userId.toString())) {
@@ -127,12 +131,13 @@ router.post('/:code/leave', authenticateToken, async (req, res) => {
 router.put('/:code/playback', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
     // Destructure playback details from req.body
     const { currentSongId, currentSong: currentSongPayload, currentTime, isPlaying, queue, serverTime, syncTimestamp } = req.body;
 
     // Validate room
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     // Optional: Only host can update playback
@@ -213,6 +218,7 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
 router.put('/:code', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
     const { name, theme } = req.body;
 
@@ -245,6 +251,7 @@ router.put('/:code', authenticateToken, async (req, res) => {
 router.delete('/:code/users', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
     const { userId: userIdToRemove } = req.body;
 
@@ -252,7 +259,7 @@ router.delete('/:code/users', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'userId required in request body' });
     }
 
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     // Only host can remove users
@@ -284,9 +291,10 @@ router.delete('/:code/users', authenticateToken, async (req, res) => {
 router.delete('/:code', authenticateToken, async (req, res) => {
   try {
     const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
 
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     // Only host can delete the room

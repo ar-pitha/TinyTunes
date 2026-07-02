@@ -180,17 +180,21 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   // Initialize audio player when currentSong loads from cache (on mount)
   // This ensures audio resumes after page refresh
   useEffect(() => {
-    if (!currentSong || !currentSong._id) return;
+    if (!currentSong) return;
     if (!audioRef.current) return;
 
     // Only run once on initial mount (when loadingRoom transitions to false)
     if (loadingRoom) return;
 
+    if (currentSong.source === 'device') return;
+
     const audio = audioRef.current;
-    const streamUrl = `${API_SONGS}/${currentSong._id}/stream`;
+    const songId = currentSong._id;
+    if (!songId) return;
+    const streamUrl = `${API_SONGS}/${songId}/stream`;
 
     // Check if audio already has this src loaded
-    if (audio.src && String(audio.src).includes(currentSong._id)) {
+    if (audio.src && String(audio.src).includes(songId)) {
       return; // Already loaded
     }
 
@@ -696,20 +700,13 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       const serverTime = Date.now();
       // For device songs, use song.id (not _id which is undefined)
       const songId = currentSong ? (currentSong._id || currentSong.id || null) : null;
-      const payload = {
-        currentSongId: songId,
-        currentSong: currentSong ? {
-          _id: songId,
-          title: currentSong.title,
-          artist: currentSong.artist,
-          source: currentSong.source || 'uploaded',
-          // Don't send contentUri/url in payload — guests can't use it
-        } : null,
+      const payload = buildPlaybackPayload({
+        currentSong,
         currentTime: audioRef.current ? audioRef.current.currentTime : 0,
         isPlaying,
-        queue: buildQueuePayload(queue),
+        queue,
         serverTime,
-      };
+      });
 
       // Send via Socket.io EVERY update (fast, real-time)
       try {
@@ -773,14 +770,20 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       return;
     }
 
-    const streamUrl = `${API_SONGS}/${currentSong._id}/stream`;
+    const streamUrl = resolveSongUrl(currentSong);
+    if (!streamUrl) {
+      audio.pause();
+      try { audio.removeAttribute('src'); audio.load(); setCurrentDuration(0); } catch (e) {}
+      return;
+    }
 
     // set crossOrigin and preload so metadata and range requests work reliably
     audio.crossOrigin = 'anonymous';
     audio.preload = 'metadata';
 
     // compare by id to avoid absolute/relative URL differences
-    const srcIncludesId = audio.src && String(audio.src).includes(currentSong._id);
+    const songIdentifier = currentSong.source === 'device' ? currentSong.id : currentSong._id;
+    const srcIncludesId = audio.src && songIdentifier && String(audio.src).includes(String(songIdentifier));
     if (!srcIncludesId) {
       // Priority order for resume time:
       // 1. pendingSeekTimeRef — latency-compensated time from the most recent socket
@@ -957,6 +960,29 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       setBufferedEnd(0);
     };
   }, [currentSong, isHost, playbackEnabled]);
+
+  const buildPlaybackPayload = (overrides = {}) => {
+    const song = overrides.currentSong ?? currentSong ?? null;
+    const songId = song ? (song._id || song.id || null) : null;
+    const songPayload = song ? {
+      _id: songId,
+      id: song.id || songId,
+      title: song.title || 'Unknown',
+      artist: song.artist || 'Unknown Artist',
+      album: song.album || 'Unknown Album',
+      duration: song.duration || 0,
+      source: song.source || 'uploaded',
+    } : null;
+
+    return {
+      currentSongId: songId,
+      currentSong: songPayload,
+      currentTime: typeof overrides.currentTime === 'number' ? overrides.currentTime : (audioRef.current ? audioRef.current.currentTime : 0),
+      isPlaying: typeof overrides.isPlaying === 'boolean' ? overrides.isPlaying : isPlaying,
+      queue: buildQueuePayload(overrides.queue ?? queue),
+      ...(typeof overrides.serverTime === 'number' ? { serverTime: overrides.serverTime } : {}),
+    };
+  };
 
   // Helper: emit playback state via socket
   const emitHostPlayback = (payload) => {
@@ -1141,13 +1167,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           if (audioUrl) applyAudioSrc(audioUrl, true);
         }
 
-        const queuePayload = newQ.map(s => ({ _id: s._id || s.id || null, title: s.title || 'Unknown', artist: s.artist || 'Unknown Artist', album: s.album || 'Unknown Album', duration: s.duration || 0, source: s.source || (isDevice ? 'device' : 'uploaded') }));
-        const payload = { currentSongId: placeholder._id || placeholder.id || null, currentSong: { _id: placeholder._id || placeholder.id || null, title: placeholder.title || 'Unknown', artist: placeholder.artist || 'Unknown Artist', album: placeholder.album || 'Unknown Album', duration: placeholder.duration || 0, source: isDevice ? 'device' : 'uploaded' }, currentTime: 0, isPlaying: true, queue: queuePayload };
+        const payload = buildPlaybackPayload({ currentSong: placeholder, currentTime: 0, isPlaying: true, queue: newQ });
         emitHostPlayback(payload);
         persistPlayback(payload);
       } else {
-        const queuePayload = newQ.map(s => ({ _id: s._id || s.id || null, title: s.title || 'Unknown', artist: s.artist || 'Unknown Artist', album: s.album || 'Unknown Album', duration: s.duration || 0, source: s.source || (isDevice ? 'device' : 'uploaded') }));
-        const payload = { currentSongId: currentSong?._id || null, currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title || 'Unknown', artist: currentSong.artist || 'Unknown Artist', album: currentSong.album || 'Unknown Album', duration: currentSong.duration || 0, source: currentSong.source || 'uploaded' } : null, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: queuePayload };
+        const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: newQ });
         emitHostPlayback(payload);
         persistPlayback(payload);
       }
@@ -1182,8 +1206,13 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
           // Broadcast updated playback state with uploaded _id so guests can stream
           setTimeout(() => {
-            const q = (queue || []).map(s => ({ _id: s._id || s.id || null, title: s.title || 'Unknown', artist: s.artist || 'Unknown Artist', album: s.album || 'Unknown Album', duration: s.duration || 0, source: s.source || 'uploaded' }));
-            const payload = { currentSongId: (currentSong && ((currentSong.id && currentSong.id === song.id) ? uploaded._id : currentSong._id)) || (uploaded._id), currentSong: (currentSong && ((currentSong.id && currentSong.id === song.id) ? { _id: uploaded._id, title: uploaded.title, artist: uploaded.artist, album: uploaded.album, duration: uploaded.duration } : currentSong)) || { _id: uploaded._id, title: uploaded.title, artist: uploaded.artist, album: uploaded.album, duration: uploaded.duration }, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: q };
+            const q = (queue || []);
+            const payload = buildPlaybackPayload({
+              currentSong: (currentSong && ((currentSong.id && currentSong.id === song.id) ? { ...currentSong, ...uploaded } : currentSong)) || { ...uploaded, source: 'uploaded' },
+              currentTime: audioRef.current ? audioRef.current.currentTime : 0,
+              isPlaying,
+              queue: q,
+            });
             emitHostPlayback(payload);
             persistPlayback(payload);
           }, 100);
@@ -1219,13 +1248,12 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       audioRef.current.pause();
     }
     setIsPlaying(newPlaying);
-    const payload = {
-      currentSongId: currentSong?._id || null,
-      currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist } : null,
+    const payload = buildPlaybackPayload({
+      currentSong,
       currentTime: audioRef.current ? audioRef.current.currentTime : 0,
       isPlaying: newPlaying,
-      queue: buildQueuePayload(queue),
-    };
+      queue,
+    });
     emitHostPlayback(payload);
     persistPlayback(payload);
   };
@@ -1338,7 +1366,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (prev.length <= 1) {
         setCurrentSong(null);
         setIsPlaying(false);
-        const payload = { currentSongId: null, currentSong: null, currentTime: 0, isPlaying: false, queue: [] };
+        const payload = buildPlaybackPayload({ currentSong: null, currentTime: 0, isPlaying: false, queue: [] });
         emitHostPlayback(payload);
         persistPlayback(payload);
         return [];
@@ -1346,13 +1374,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       const [, ...rest] = prev;
       const next = rest[0] || null;
       setCurrentSong(next);
-      const payload = {
-        currentSongId: next ? next._id : null,
-        currentSong: next ? { _id: next._id, title: next.title, artist: next.artist } : null,
-        currentTime: 0,
-        isPlaying: true,
-        queue: buildQueuePayload(rest)
-      };
+      const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
       emitHostPlayback(payload);
       persistPlayback(payload);
       return rest;
@@ -1402,13 +1424,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   const removeFromQueue = (index) => {
     setQueue(prev => {
       const newQ = prev.filter((_, i) => i !== index);
-      const payload = {
-        currentSongId: currentSong?._id || null,
-        currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist } : null,
-        currentTime: audioRef.current ? audioRef.current.currentTime : 0,
-        isPlaying,
-        queue: buildQueuePayload(newQ)
-      };
+      const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: newQ });
       emitHostPlayback(payload);
       persistPlayback(payload);
       return newQ;
@@ -1482,20 +1498,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       }
     }
 
-    const payload = {
-      currentSongId: isDevice ? songToPlay.id : songToPlay._id,
-      currentSong: {
-        _id: isDevice ? songToPlay.id : songToPlay._id,
-        title: songToPlay.title || 'Unknown',
-        artist: songToPlay.artist || 'Unknown Artist',
-        album: songToPlay.album || 'Unknown Album',
-        duration: songToPlay.duration || 0,
-        source: isDevice ? 'device' : 'uploaded'
-      },
-      currentTime: 0,
-      isPlaying: true,
-      queue: [],
-    };
+    const payload = buildPlaybackPayload({ currentSong: songToPlay, currentTime: 0, isPlaying: true, queue: [] });
     emitHostPlayback(payload);
     persistPlayback(payload);
   };
@@ -1602,13 +1605,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (duration && t > duration) t = duration - 0.1;
       audio.currentTime = t;
       setCurrentTime(t);
-      const payload = {
-        currentSongId: currentSong?._id || null,
-        currentSong: currentSong ? { _id: currentSong._id, title: currentSong.title, artist: currentSong.artist } : null,
-        currentTime: t,
-        isPlaying,
-        queue: buildQueuePayload(queue),
-      };
+      const payload = buildPlaybackPayload({ currentSong, currentTime: t, isPlaying, queue });
       emitHostPlayback(payload);
       persistPlayback(payload);
     } catch (e) {
@@ -1630,15 +1627,10 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     setCurrentSong(prev);
     setIsPlaying(true);
     if (audioRef.current) {
-      applyAudioSrc(`${API_SONGS}/${prev._id}/stream`, true);
+      const prevUrl = resolveSongUrl(prev);
+      if (prevUrl) applyAudioSrc(prevUrl, true);
     }
-    const payload = {
-      currentSongId: prev._id,
-      currentSong: { _id: prev._id, title: prev.title, artist: prev.artist },
-      currentTime: 0,
-      isPlaying: true,
-      queue: queue.map(s => s._id || s),
-    };
+    const payload = buildPlaybackPayload({ currentSong: prev, currentTime: 0, isPlaying: true, queue });
     emitHostPlayback(payload);
     persistPlayback(payload);
   };

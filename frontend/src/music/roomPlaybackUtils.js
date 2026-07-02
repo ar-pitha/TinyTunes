@@ -42,12 +42,21 @@ export function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-export const buildQueuePayload = (q) => {
-  return q.map((s) => {
+export const buildQueuePayload = (q = []) => {
+  return (q || []).map((s) => {
     if (typeof s === 'string') {
-      return { _id: s, title: '(unknown)', artist: '' };
+      return { _id: s, id: s, title: '(unknown)', artist: '', source: 'uploaded' };
     }
-    return { _id: s._id, title: s.title || '(unknown)', artist: s.artist || '' };
+    const id = s?._id || s?.id || null;
+    return {
+      _id: id,
+      id: s?.id || id,
+      title: s?.title || '(unknown)',
+      artist: s?.artist || '',
+      album: s?.album || '',
+      duration: s?.duration || 0,
+      source: s?.source || 'uploaded',
+    };
   });
 };
 
