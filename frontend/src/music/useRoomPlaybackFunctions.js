@@ -1360,7 +1360,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   // When current song ends
   const handleEnded = () => {
-    if (currentSong && currentSong._id) {
+    if (!isHost) return; // Only host controls playback progression
+    if (currentSong && (currentSong._id || currentSong.id)) {
       playedStackRef.current.push(currentSong);
     }
     setQueue(prev => {
@@ -1375,6 +1376,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       const [, ...rest] = prev;
       const next = rest[0] || null;
       setCurrentSong(next);
+      setIsPlaying(true); // Ensure isPlaying is set to true when auto-advancing
       const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
       emitHostPlayback(payload);
       persistPlayback(payload);
@@ -1382,7 +1384,16 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     });
   };
 
-  // Update playback current time
+  // Attach onEnded listener to audio element to ensure queue auto-play works reliably
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !isHost) return;
+
+    audio.addEventListener('ended', handleEnded);
+    return () => {
+      try { audio.removeEventListener('ended', handleEnded); } catch (e) {}
+    };
+  }, [isHost, handleEnded, queue, currentSong]);
   const onTimeUpdate = () => {
     if (!audioRef.current) return;
     const t = audioRef.current.currentTime;
