@@ -6,10 +6,10 @@ const roomSchema = new mongoose.Schema({
   host: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   isPrivate: { type: Boolean, default: false },
   password: { type: String },
-  currentSong: { type: mongoose.Schema.Types.ObjectId, ref: 'Song' },
+  currentSong: { type: mongoose.Schema.Types.Mixed, default: null },
   currentTime: { type: Number, default: 0 }, // playback time in seconds
   isPlaying: { type: Boolean, default: false },
-  queue: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Song' }], // list of song IDs
+  queue: [{ type: mongoose.Schema.Types.Mixed, default: [] }], // list of song entries (uploaded or device-based)
   users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now },
   theme: { type: String, default: 'default' },

@@ -45,9 +45,7 @@ router.get('/:code', authenticateToken, async (req, res) => {
 
     const room = await Room.findOne({ code: normalizedCode })
       .populate('host', 'username email')
-      .populate('users', 'username email')
-      .populate('currentSong', 'title artist')
-      .populate('queue', 'title artist'); // Populate queue with full song objects
+      .populate('users', 'username email');
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
@@ -145,8 +143,18 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Only host can update playback' });
     }
 
-    // Update currentSong — skip DB lookup for device songs (non-ObjectId IDs)
-    if (currentSongId) {
+    const normalizedSongPayload = currentSongPayload && typeof currentSongPayload === 'object' ? currentSongPayload : null;
+    if (normalizedSongPayload && (normalizedSongPayload._id || normalizedSongPayload.id || normalizedSongPayload.source === 'device')) {
+      room.currentSong = {
+        _id: normalizedSongPayload._id || normalizedSongPayload.id || null,
+        id: normalizedSongPayload.id || normalizedSongPayload._id || null,
+        title: normalizedSongPayload.title || 'Unknown',
+        artist: normalizedSongPayload.artist || '',
+        album: normalizedSongPayload.album || '',
+        duration: normalizedSongPayload.duration || 0,
+        source: normalizedSongPayload.source || (normalizedSongPayload._id ? 'uploaded' : 'device'),
+      };
+    } else if (currentSongId) {
       const isValidObjectId = mongoose.Types.ObjectId.isValid(currentSongId);
       if (isValidObjectId) {
         try {
@@ -154,15 +162,17 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
           if (songExists) {
             room.currentSong = currentSongId;
           }
-          // If not found, keep existing currentSong (song may have been deleted)
         } catch (e) {
           console.warn('Song lookup error:', e.message);
-          // Continue — do not block playback update
         }
       } else {
-        // Device song — ID is not a MongoDB ObjectId, store null in DB
-        // (device songs can't be stored in MongoDB; metadata is in the socket payload)
-        room.currentSong = null;
+        room.currentSong = {
+          _id: currentSongId,
+          id: currentSongId,
+          title: 'Unknown',
+          artist: '',
+          source: 'device',
+        };
       }
     } else {
       room.currentSong = null;
@@ -171,14 +181,27 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
     if (typeof currentTime === 'number') room.currentTime = Math.max(0, currentTime);
     if (typeof isPlaying === 'boolean') room.isPlaying = isPlaying;
     if (Array.isArray(queue)) {
-      // Only persist valid ObjectId queue entries (device songs are socket-only)
       room.queue = queue
-        .filter(q => q)
-        .map(q => {
-          const id = typeof q === 'string' ? q : (q._id || null);
-          return id && mongoose.Types.ObjectId.isValid(id) ? id : null;
+        .filter(Boolean)
+        .map((entry) => {
+          if (typeof entry === 'string') {
+            return entry;
+          }
+          if (typeof entry === 'object') {
+            const id = entry._id || entry.id || null;
+            return {
+              _id: entry._id || entry.id || null,
+              id: entry.id || entry._id || null,
+              title: entry.title || 'Unknown',
+              artist: entry.artist || '',
+              album: entry.album || '',
+              duration: entry.duration || 0,
+              source: entry.source || (id && mongoose.Types.ObjectId.isValid(id) ? 'uploaded' : 'device'),
+            };
+          }
+          return null;
         })
-        .filter(q => q);
+        .filter(Boolean);
     }
 
     // Server-side timestamp for real-time sync (prefer client's serverTime if provided)
@@ -186,10 +209,6 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
     room.lastSyncAt = new Date();
 
     await room.save();
-
-    // Populate queue with full song data before responding
-    await room.populate('queue', 'title artist');
-    await room.populate('currentSong', 'title artist');
 
     // Build response with room data and sync info
     const response = {
@@ -222,7 +241,7 @@ router.put('/:code', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const { name, theme } = req.body;
 
-    const room = await Room.findOne({ code });
+    const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     // Only host can update room details
@@ -237,9 +256,7 @@ router.put('/:code', authenticateToken, async (req, res) => {
 
     const updatedRoom = await Room.findById(room._id)
       .populate('host', 'username email')
-      .populate('users', 'username email')
-      .populate('currentSong', 'title artist')
-      .populate('queue', 'title artist');
+      .populate('users', 'username email');
 
     res.json(updatedRoom);
   } catch (error) {

@@ -270,8 +270,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           // If this client is host, don't override host playback/queue
           if (server.host && server.host._id === userId) return;
 
-          const serverSongId = server.currentSong?._id || server.currentSongId || null;
-          const localSongId = currentSong?._id || null;
+          const serverSongId = server.currentSong?._id || server.currentSong?.id || server.currentSongId || null;
+          const localSongId = currentSong?._id || currentSong?.id || null;
 
           // If the guest's current song is a device song (source === 'device'),
           // the REST response will always return currentSong=null (device IDs are not
@@ -280,11 +280,12 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
           if (serverSongId !== localSongId && !localIsDeviceSong) {
             if (serverSongId) {
-              const found = allSongs.find(s => s._id === serverSongId);
-              const songData = found || server.currentSong || { _id: serverSongId };
+              const found = allSongs.find(s => s._id === serverSongId || s.id === serverSongId);
+              const songData = found || server.currentSong || { _id: serverSongId, id: serverSongId };
               // Ensure title and artist exist
               setCurrentSong({
-                _id: songData._id,
+                _id: songData._id || songData.id || serverSongId,
+                id: songData.id || songData._id || serverSongId,
                 title: songData.title || '(no title)',
                 artist: songData.artist || '(no artist)',
                 ...songData
@@ -478,7 +479,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       pendingSeekTimeRef.current = targetTime;
 
       // Determine if this event changes the current song
-      const incomingSongId = playback.currentSong?._id || playback.currentSongId || null;
+      const incomingSongId = playback.currentSong?._id || playback.currentSong?.id || playback.currentSongId || null;
       const currentAudioSrc = audioRef.current?.src || '';
       const srcAlreadyLoaded = incomingSongId && currentAudioSrc.includes(incomingSongId);
 
@@ -488,19 +489,19 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       // every 300ms and calls audio.play() — that's what breaks the audio and overrides
       // the guest pause button.
       const incomingSong = playback.currentSong || null;
-      const incomingId = incomingSong?._id || playback.currentSongId || null;
+      const incomingId = incomingSong?._id || incomingSong?.id || playback.currentSongId || null;
 
       // Only mutate currentSong state when the song ID actually changes
       setCurrentSong(prev => {
-        const prevId = prev?._id || null;
+        const prevId = prev?._id || prev?.id || null;
         if (prevId === incomingId) return prev; // same song — keep same reference
         if (incomingId === null) {
           pendingSeekTimeRef.current = null;
           return null;
         }
         if (incomingSong) return incomingSong;
-        const found = allSongsRef.current.find(s => s._id === incomingId);
-        return found || { _id: incomingId };
+        const found = allSongsRef.current.find(s => s._id === incomingId || s.id === incomingId);
+        return found || { _id: incomingId, id: incomingId };
       });
 
       // If the audio src is already loaded for this song, correct drift smoothly

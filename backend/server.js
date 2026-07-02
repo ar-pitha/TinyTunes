@@ -50,39 +50,46 @@ const server = http.createServer(app);
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://tiny-tunes.vercel.app",
+  "https://tinytunes.onrender.com",
   "http://localhost",
   "capacitor://localhost",
   "https://localhost",
   "http://localhost:5173",
-];
+].filter(Boolean);
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      // Allow mobile apps, Postman, curl (no Origin header)
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow non-browser clients and browser dev tools without Origin
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      console.log("Blocked Origin:", origin);
+    console.log("Blocked Origin:", origin);
+    return callback(new Error(`Origin not allowed: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  optionsSuccessStatus: 204,
+  preflightContinue: false,
+};
 
-      return callback(new Error(`Origin not allowed: ${origin}`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
-
-
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.log("Socket blocked origin:", origin);
+      return callback(new Error(`Origin not allowed: ${origin}`));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   },
@@ -182,9 +189,23 @@ io.on("connection", (socket) => {
   if (!io.userSockets) io.userSockets = new Map();
   if (!io.roomPlaybacks) io.roomPlaybacks = new Map();
 
+  socket.data.roomCodes = new Set();
+  socket.data.userId = null;
+
+  const leaveAllRooms = () => {
+    for (const roomCode of Array.from(socket.data.roomCodes || [])) {
+      socket.leave(roomCode);
+      socket.data.roomCodes.delete(roomCode);
+    }
+  };
+
   // Client can register their authenticated userId after connecting
   socket.on("registerUser", (userId) => {
     if (!userId) return;
+    if (socket.data.userId && io.userSockets.get(String(socket.data.userId)) === socket.id) {
+      io.userSockets.delete(String(socket.data.userId));
+    }
+    socket.data.userId = String(userId);
     io.userSockets.set(String(userId), socket.id);
     console.log(`Registered user ${userId} -> socket ${socket.id}`);
   });
@@ -192,22 +213,27 @@ io.on("connection", (socket) => {
   // join specific room namespace (logical room by roomCode)
   socket.on("joinRoom", (roomCode) => {
     if (!roomCode) return;
-    socket.join(roomCode);
-    console.log(`Socket ${socket.id} joined room ${roomCode}`);
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    if (socket.data.roomCodes.has(normalizedCode)) return;
+    socket.join(normalizedCode);
+    socket.data.roomCodes.add(normalizedCode);
+    console.log(`Socket ${socket.id} joined room ${normalizedCode}`);
 
     // If we have a cached playback for this room, immediately send it to the joining socket
-    const playback = io.roomPlaybacks.get(roomCode);
+    const playback = io.roomPlaybacks.get(normalizedCode);
     if (playback) {
       // send only to the newly joined socket so it initializes to host state
       socket.emit("playback", playback);
-      console.log(`Sent cached playback to ${socket.id} for room ${roomCode}`);
+      console.log(`Sent cached playback to ${socket.id} for room ${normalizedCode}`);
     }
   });
 
   socket.on("leaveRoom", (roomCode) => {
     if (!roomCode) return;
-    socket.leave(roomCode);
-    console.log(`Socket ${socket.id} left room ${roomCode}`);
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.data.roomCodes.delete(normalizedCode);
+    socket.leave(normalizedCode);
+    console.log(`Socket ${socket.id} left room ${normalizedCode}`);
   });
 
   // Host will emit 'hostPlayback' with { roomCode, playback }
@@ -251,13 +277,14 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
+    leaveAllRooms();
     // cleanup map entries referencing this socket
     if (io.userSockets) {
-      for (const [uid, sid] of io.userSockets.entries()) {
-        if (sid === socket.id) {
-          io.userSockets.delete(uid);
-          console.log(`Unregistered user ${uid} from socket ${sid}`);
-          break;
+      if (socket.data.userId) {
+        const currentSocketId = io.userSockets.get(String(socket.data.userId));
+        if (currentSocketId === socket.id) {
+          io.userSockets.delete(String(socket.data.userId));
+          console.log(`Unregistered user ${socket.data.userId} from socket ${socket.id}`);
         }
       }
     }
