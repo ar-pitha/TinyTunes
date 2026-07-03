@@ -1365,7 +1365,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       playedStackRef.current.push(currentSong);
     }
     setQueue(prev => {
-      if (prev.length <= 1) {
+      if (prev.length === 0) {
         setCurrentSong(null);
         setIsPlaying(false);
         const payload = buildPlaybackPayload({ currentSong: null, currentTime: 0, isPlaying: false, queue: [] });
@@ -1373,8 +1373,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         persistPlayback(payload);
         return [];
       }
-      const [, ...rest] = prev;
-      const next = rest[0] || null;
+      const [next, ...rest] = prev;
       setCurrentSong(next);
       setIsPlaying(true); // Ensure isPlaying is set to true when auto-advancing
       const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
