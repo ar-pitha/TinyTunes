@@ -969,19 +969,20 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       return;
     }
 
-    // Resolve the correct URL: contentUri (Capacitor), blob URL, or stream URL
-    const streamUrl = resolveSongUrl(currentSong);
-    if (!streamUrl) {
+    // Resolve the correct URL: prefer the current host playback URL if we are already
+    // playing a local device track that has been replaced by an uploaded object.
+    const playbackUrl = resolveHostPlaybackUrl(currentSong);
+    if (!playbackUrl) {
       console.warn('No playable URL for song:', currentSong.title, '— ContentUri missing or device blob expired');
       return;
     }
 
     // Identify the song using the resolved URL, not only the song ID.
     const currentSrc = audioRef.current?.src || '';
-    const alreadyLoaded = currentSrc && streamUrl && String(currentSrc).includes(String(streamUrl));
+    const alreadyLoaded = currentSrc && playbackUrl && String(currentSrc).includes(String(playbackUrl));
     if (!alreadyLoaded) {
       const resumeTime = audioRef.current?.currentTime || 0;
-      applyAudioSrc(streamUrl, isPlaying, resumeTime);
+      applyAudioSrc(playbackUrl, isPlaying, resumeTime);
     }
 
     const onLoadedMetaHost = () => {
@@ -1037,6 +1038,13 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       setBufferedEnd(0);
     };
   }, [currentSong, isHost, playbackEnabled]);
+
+  const resolveHostPlaybackUrl = (song) => {
+    if (!song) return null;
+    if (song.playbackUrl) return song.playbackUrl;
+    if (song.source === 'device' && song.url) return song.url;
+    return resolveSongUrl(song);
+  };
 
   const buildPlaybackPayload = (overrides = {}) => {
     const song = overrides.currentSong ?? currentSong ?? null;
@@ -1286,12 +1294,18 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             return replaced;
           });
 
-          // If currentSong is the placeholder, update it to the uploaded song (keep playback)
+          // If currentSong is the placeholder, update it to the uploaded song while
+          // preserving the currently loaded local playback URL and currentTime.
           const currentPlaybackTime = audioRef.current ? audioRef.current.currentTime : 0;
           setCurrentSong(prev => {
             if (!prev) return prev;
             if ((prev.id && song.id && prev.id === song.id) || (prev._id && prev._id === uploaded._id)) {
-              return { ...uploaded, source: 'uploaded', currentTime: currentPlaybackTime };
+              return {
+                ...uploaded,
+                source: 'uploaded',
+                currentTime: currentPlaybackTime,
+                playbackUrl: resolveHostPlaybackUrl(song),
+              };
             }
             return prev;
           });
@@ -1553,7 +1567,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(replaced)); } catch (e) {}
             return replaced;
           });
-          setCurrentSong(prev => (prev && prev.id === song.id) ? uploaded : prev);
+          setCurrentSong(prev => (prev && prev.id === song.id) ? {
+            ...uploaded,
+            source: 'uploaded',
+            playbackUrl: resolveHostPlaybackUrl(song),
+          } : prev);
 
           const payload = {
             currentSongId: uploaded._id,
