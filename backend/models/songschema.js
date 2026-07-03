@@ -25,6 +25,10 @@ const songSchema = new mongoose.Schema({
     type: Number,
     required: true // In bytes
   },
+  filePath: {
+    type: String,
+    default: null
+  },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

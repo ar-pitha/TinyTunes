@@ -5,6 +5,13 @@ const authenticateToken = require('../middleware/auth');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+const UPLOAD_AUDIO_DIR = path.resolve(__dirname, '../../uploads/audio');
+if (!fs.existsSync(UPLOAD_AUDIO_DIR)) {
+  fs.mkdirSync(UPLOAD_AUDIO_DIR, { recursive: true });
+}
+const decodePromises = new Map();
 
 // --------------- LRU Buffer Cache ---------------
 // Avoids re-decoding base64 from MongoDB on every range request.
@@ -133,13 +140,18 @@ router.post('/upload', authenticateToken, (req, res) => {
       const song = new Song(songData);
       await song.save();
 
-      console.log('Song saved successfully:', song._id);
+      const fileExt = path.extname(req.file.originalname) || '';
+      const diskPath = path.join(UPLOAD_AUDIO_DIR, `${song._id}${fileExt}`);
       try {
-        cachePut(song._id.toString(), req.file.buffer, req.file.mimetype);
-        console.log('Cached uploaded song bytes for fast first stream:', song._id);
-      } catch (cacheErr) {
-        console.warn('Failed to warm stream cache on upload:', cacheErr);
+        fs.writeFileSync(diskPath, req.file.buffer);
+        song.filePath = diskPath;
+        await song.save();
+        console.log('Persisted uploaded audio to disk:', diskPath);
+      } catch (diskErr) {
+        console.warn('Failed to persist uploaded audio to disk:', diskErr);
       }
+
+      console.log('Song saved successfully:', song._id);
 
       res.status(201).json({ 
         message: 'Song uploaded successfully', 
@@ -217,7 +229,8 @@ router.get('/:id/stream', async (req, res) => {
   const songId = req.params?.id;
   const timerLabel = `streamSong-${songId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   console.time(timerLabel);
-  console.log('Stream request received', { songId, range: req.headers.range || 'none' });
+  const range = req.headers.range;
+  console.log('Stream request received', { songId, range: range || 'none' });
 
   if (!songId) {
     console.timeEnd(timerLabel);
@@ -229,126 +242,160 @@ router.get('/:id/stream', async (req, res) => {
     return res.status(400).json({ error: 'Invalid Song ID' });
   }
 
-  try {
-    // ---------- Try in-memory cache first (avoid MongoDB + base64 decode) ----------
-    const cached = cacheGet(songId);
-    if (cached) {
-      console.timeLog(timerLabel, 'cache HIT', { size: cached.size });
-      serveBuffer(req, res, cached.buffer, cached.contentType, songId, timerLabel);
-      console.timeEnd(timerLabel);
+  const getContentType = (song, filePath) => {
+    const formatMap = {
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      m4a: 'audio/mp4',
+      aac: 'audio/aac',
+      flac: 'audio/flac',
+      ogg: 'audio/ogg',
+      webm: 'audio/webm'
+    };
+
+    if (song.fileData?.contentType) return song.fileData.contentType;
+    const ext = filePath ? path.extname(filePath).substring(1).toLowerCase() : '';
+    if (ext && formatMap[ext]) return formatMap[ext];
+
+    const format = (song.metadata?.format || '').toLowerCase().trim();
+    if (format && formatMap[format]) return formatMap[format];
+
+    if (song.originalName) {
+      const nameExt = path.extname(song.originalName).substring(1).toLowerCase();
+      if (nameExt && formatMap[nameExt]) return formatMap[nameExt];
+    }
+
+    return 'audio/mpeg';
+  };
+
+  const parseRange = (rangeHeader, total) => {
+    if (!rangeHeader || !rangeHeader.startsWith('bytes=')) return null;
+    const parts = rangeHeader.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+    if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || end < start || start >= total) return null;
+    return { start, end: Math.min(end, total - 1) };
+  };
+
+  const streamFromDisk = (filePath, contentType, rangeInfo) => {
+    const stat = fs.statSync(filePath);
+    const total = stat.size;
+    const stream = rangeInfo
+      ? fs.createReadStream(filePath, { start: rangeInfo.start, end: rangeInfo.end })
+      : fs.createReadStream(filePath);
+
+    stream.on('error', (err) => {
+      console.error('Disk stream error:', err, { songId, filePath });
+      if (!res.headersSent) {
+        res.status(500).end('Stream error');
+      } else {
+        stream.destroy(err);
+      }
+    });
+
+    res.on('close', () => stream.destroy());
+    res.on('finish', () => console.timeEnd(timerLabel));
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+    res.setHeader('ETag', `"${songId}"`);
+
+    if (rangeInfo) {
+      res.writeHead(206, {
+        'Content-Range': `bytes ${rangeInfo.start}-${rangeInfo.end}/${total}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': rangeInfo.end - rangeInfo.start + 1,
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400, immutable'
+      });
+      stream.pipe(res);
       return;
     }
-    console.timeLog(timerLabel, 'cache MISS');
 
+    res.writeHead(200, {
+      'Content-Length': total,
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400, immutable'
+    });
+    stream.pipe(res);
+  };
+
+  try {
     console.timeLog(timerLabel, 'db load start');
-    // Select the embedded fileData (if present) and minimal metadata
-    const song = await Song.findById(songId).select('fileData filePath metadata originalName fileSize uploadedBy');
-    console.timeLog(timerLabel, 'db load end', { found: !!song });
+    const song = await Song.findById(songId)
+      .select('filePath fileData.contentType metadata.format originalName')
+      .lean();
+    console.timeLog(timerLabel, 'db load end', { found: !!song, filePath: !!song?.filePath });
+
     if (!song) {
       console.timeEnd(timerLabel);
       return res.status(404).json({ error: 'Song not found' });
     }
 
-    // If file data is embedded as base64, stream from buffer (support Range)
-    if (song.fileData?.data) {
-      // Map file format to proper audio MIME type
-      const formatMap = {
-        'mp3': 'audio/mpeg',
-        'wav': 'audio/wav',
-        'm4a': 'audio/mp4',
-        'aac': 'audio/aac',
-        'flac': 'audio/flac',
-        'ogg': 'audio/ogg',
-        'webm': 'audio/webm'
-      };
-      
-      let contentType = song.fileData.contentType;
-      if (!contentType) {
-        const format = (song.metadata?.format || '').toLowerCase().trim();
-        contentType = formatMap[format] || 'audio/mpeg'; // Default to mp3
-      }
+    const contentType = getContentType(song, song.filePath);
 
+    if (song.filePath && fs.existsSync(song.filePath)) {
+      const stat = fs.statSync(song.filePath);
+      const rangeInfo = range ? parseRange(range, stat.size) : null;
+      if (range && !rangeInfo) {
+        console.timeEnd(timerLabel);
+        return res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
+      }
+      console.timeLog(timerLabel, 'stream from disk', { filePath: song.filePath, range: range || 'none' });
+      streamFromDisk(song.filePath, contentType, rangeInfo);
+      return;
+    }
+
+    console.timeLog(timerLabel, 'legacy load required');
+    const legacySong = await Song.findById(songId)
+      .select('fileData.data fileData.contentType metadata.format originalName')
+      .lean();
+
+    if (!legacySong || !legacySong.fileData?.data) {
+      console.error('Stream error: no filePath and no embedded audio data', songId);
+      console.timeEnd(timerLabel);
+      return res.status(404).json({ error: 'Audio file not available for this song' });
+    }
+
+    const legacyContentType = getContentType(legacySong, null);
+    const pending = decodePromises.get(songId);
+    if (pending) {
+      console.timeLog(timerLabel, 'awaiting existing legacy decode');
+      await pending;
+      const cachedAgain = cacheGet(songId);
+      if (cachedAgain) {
+        console.timeLog(timerLabel, 'cache HIT after wait', { size: cachedAgain.size });
+        serveBuffer(req, res, cachedAgain.buffer, cachedAgain.contentType, songId, timerLabel);
+        console.timeEnd(timerLabel);
+        return;
+      }
+    }
+
+    const requestPromise = (async () => {
       console.timeLog(timerLabel, 'base64 decode start');
-      const fileBuffer = Buffer.from(song.fileData.data, 'base64');
+      const fileBuffer = Buffer.from(legacySong.fileData.data, 'base64');
       console.timeLog(timerLabel, 'base64 decode end', { decodedBytes: fileBuffer.length });
-
-      // Store in cache so next range request won't hit MongoDB
-      cachePut(songId, fileBuffer, contentType);
+      cachePut(songId, fileBuffer, legacyContentType);
       console.timeLog(timerLabel, 'buffer cached');
+      serveBuffer(req, res, fileBuffer, legacyContentType, songId, timerLabel);
+    })();
 
-      serveBuffer(req, res, fileBuffer, contentType, songId, timerLabel);
+    decodePromises.set(songId, requestPromise);
+    try {
+      await requestPromise;
+    } finally {
+      decodePromises.delete(songId);
       console.timeEnd(timerLabel);
-      return;
     }
-
-    // Fallback: if you store files on disk/path, stream from filesystem
-    const filePath = song.filePath || (song.file && song.file.path) || song.path || song.url;
-    if (filePath) {
-      // Ensure CORS headers for filesystem streaming as well
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
-      const fs = require('fs');
-      if (!fs.existsSync(filePath)) {
-        console.error('Stream error: filePath exists in record but not on disk', filePath);
-        return res.status(404).json({ error: 'Audio file not found on server' });
-      }
-      const stat = fs.statSync(filePath);
-      const total = stat.size;
-      const range = req.headers.range;
-      
-      // Map file format to proper audio MIME type
-      const formatMap = {
-        'mp3': 'audio/mpeg',
-        'wav': 'audio/wav',
-        'm4a': 'audio/mp4',
-        'aac': 'audio/aac',
-        'flac': 'audio/flac',
-        'ogg': 'audio/ogg',
-        'webm': 'audio/webm'
-      };
-      
-      let contentType = song.fileData?.contentType;
-      if (!contentType) {
-        const ext = path.extname(filePath).substring(1).toLowerCase();
-        contentType = formatMap[ext] || 'audio/mpeg';
-      }
-
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
-        if (start >= total || end >= total) {
-          console.timeEnd(timerLabel);
-          return res.status(416).set('Content-Range', `bytes */${total}`).end();
-        }
-        res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${total}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': (end - start) + 1,
-          'Content-Type': contentType
-        });
-        fs.createReadStream(filePath, { start, end }).pipe(res);
-      } else {
-        res.writeHead(200, {
-          'Content-Length': total,
-          'Content-Type': contentType
-        });
-        fs.createReadStream(filePath).pipe(res);
-      }
-      console.timeEnd(timerLabel);
-      return;
-    }
-
-    console.error('Stream error: no fileData or filePath available for song', songId);
-    console.timeEnd(timerLabel);
-    return res.status(404).json({ error: 'Audio file not available for this song' });
-
   } catch (err) {
-    console.error('Stream error:', err);
+    console.error('Stream error:', err, { songId });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error while streaming audio' });
+    } else {
+      res.destroy(err);
+    }
     console.timeEnd(timerLabel);
-    return res.status(500).json({ error: 'Internal Server Error while streaming audio' });
   }
 });
 
