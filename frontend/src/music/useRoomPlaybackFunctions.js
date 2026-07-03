@@ -582,6 +582,60 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     }
   };
 
+  const normalizeSongText = (value) => String(value || '').trim().toLowerCase();
+  const findMatchingUploadedSong = (song) => {
+    if (!song || song.source !== 'device' || allSongs.length === 0) return null;
+    const title = normalizeSongText(song.title);
+    const artist = normalizeSongText(song.artist);
+    const album = normalizeSongText(song.album);
+    const duration = Number(song.duration) || 0;
+    return allSongs.find((uploaded) => {
+      if (!uploaded) return false;
+      const sameTitle = normalizeSongText(uploaded.title) === title;
+      const sameArtist = normalizeSongText(uploaded.artist) === artist;
+      const sameDuration = Number(uploaded.duration) === duration;
+      const uploadedAlbum = normalizeSongText(uploaded.album);
+      const albumMatches = !album || !uploadedAlbum || uploadedAlbum === album;
+      return sameTitle && sameArtist && sameDuration && albumMatches;
+    });
+  };
+
+  const deleteUploadedSong = async (songId) => {
+    if (!isHost) return;
+    if (!songId) return;
+    if (!window.confirm('Delete this uploaded song?')) return;
+
+    try {
+      const res = await fetch(`${API_SONGS}/${songId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to delete song: ${res.status}`);
+      }
+
+      const nextQueue = queue.filter((entry) => (entry?._id || entry?.id) !== songId);
+      setAllSongs((prev) => prev.filter((s) => s._id !== songId));
+      setQueue(nextQueue);
+
+      if (currentSong && ((currentSong._id && currentSong._id === songId) || (currentSong.id && currentSong.id === songId))) {
+        const nextSong = nextQueue[0] || null;
+        setCurrentSong(nextSong);
+        setIsPlaying(!!nextSong);
+        const payload = buildPlaybackPayload({ currentSong: nextSong, currentTime: 0, isPlaying: !!nextSong, queue: nextQueue });
+        emitHostPlayback(payload);
+        persistPlayback(payload);
+      }
+    } catch (err) {
+      console.error('deleteUploadedSong error:', err);
+      setError(err.message || 'Failed to delete uploaded song');
+    }
+  };
+
   // Persist device song metadata to localStorage (no url/file - not serialisable)
   useEffect(() => {
     if (deviceSongs.length > 0) {
@@ -1015,7 +1069,15 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   // Helper: upload a device song to the backend and return a server song object
   const uploadDeviceSong = async (song) => {
-    const uploadKey = song.contentUri; // Use contentUri as unique key for this upload
+    if (!song) throw new Error('No song provided for upload');
+
+    const existing = findMatchingUploadedSong(song);
+    if (existing) {
+      console.debug('Skipping upload because matching uploaded song already exists', existing._id);
+      return existing;
+    }
+
+    const uploadKey = song.contentUri || song.id || song.url || `${song.title}-${song.artist}`;
     
     try {
       // Mark as uploading
@@ -1107,6 +1169,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         source: 'uploaded'
       };
 
+      setAllSongs((prev) => {
+        if (prev.some((s) => s._id === normalizedSong._id)) return prev;
+        return [normalizedSong, ...prev];
+      });
+
       console.log('Normalized uploaded song:', normalizedSong);
 
       // Mark upload as done
@@ -1145,9 +1212,10 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (!isHost) return;
 
     const isDevice = song && song.source === 'device';
-
-    // Create a placeholder entry for device songs so playback/queue updates are immediate
-    const placeholder = isDevice ? { ...song } : song;
+    const uploadedMatch = isDevice ? findMatchingUploadedSong(song) : null;
+    const actualSong = uploadedMatch || song;
+    const isDeviceUpload = isDevice && !uploadedMatch;
+    const placeholder = isDeviceUpload ? { ...song } : actualSong;
 
     console.debug('addSongToQueue (placeholder)', placeholder._id || placeholder.id, placeholder);
 
@@ -1365,6 +1433,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (currentSong && (currentSong._id || currentSong.id)) {
       playedStackRef.current.push(currentSong);
     }
+
     setQueue(prev => {
       if (prev.length === 0) {
         setCurrentSong(null);
@@ -1374,12 +1443,15 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         persistPlayback(payload);
         return [];
       }
+
       const [next, ...rest] = prev;
       setCurrentSong(next);
-      setIsPlaying(true); // Ensure isPlaying is set to true when auto-advancing
+      setIsPlaying(true);
+
       const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
       emitHostPlayback(payload);
       persistPlayback(payload);
+
       return rest;
     });
   };
@@ -1712,6 +1784,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     playNow,
     removeUser,
     removeFromQueue,
+    deleteUploadedSong,
     resolveSongObj,
     handleDeviceFileInput,
     loadDeviceSongs,

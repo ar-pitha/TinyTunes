@@ -130,6 +130,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                       <>
                         <button onClick={() => playNow(s)}>Play Now</button>
                         <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
+                        <button onClick={() => deleteUploadedSong(s._id)} style={{ marginLeft: 8, backgroundColor: '#ef4444', color: '#fff' }}>Delete</button>
                       </>
                     ) : (
                       <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
