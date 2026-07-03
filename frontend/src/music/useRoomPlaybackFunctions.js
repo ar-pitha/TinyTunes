@@ -1692,6 +1692,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     try { audio.pause(); } catch (e) {}
 
     const audioTimer = `audioLoad-${url}`;
+    console.log('applyAudioSrc start', { url, shouldPlay, startTime });
     console.time(audioTimer);
     audioPendingRef.current.src = url;
     const onCanPlay = () => {
@@ -1701,6 +1702,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         audioPendingRef.current.listener = null;
         return;
       }
+      console.log('audio canplay event', { url, currentTime: audio.currentTime });
       console.timeLog(audioTimer, 'canplay fired', { currentTime: audio.currentTime });
       // Seek to resume position before playing
       if (startTime > 0) {
@@ -1719,9 +1721,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     try {
       audio.removeAttribute('src');
       audio.src = url;
+      console.log('audio.src assigned', url);
       console.timeLog(audioTimer, 'src assigned');
       audio.addEventListener('canplay', onCanPlay);
       audio.load();
+      console.timeLog(audioTimer, 'load called');
     } catch (e) {
       console.warn('applyAudioSrc error', e);
       console.timeEnd(audioTimer);
