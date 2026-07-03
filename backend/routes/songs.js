@@ -6,43 +6,12 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Transform } = require('stream');
 
 const UPLOAD_AUDIO_DIR = path.resolve(__dirname, '../../uploads/audio');
 if (!fs.existsSync(UPLOAD_AUDIO_DIR)) {
   fs.mkdirSync(UPLOAD_AUDIO_DIR, { recursive: true });
 }
 const decodePromises = new Map();
-
-class Base64DecodeTransform extends Transform {
-  constructor() {
-    super();
-    this.buffer = '';
-  }
-
-  _transform(chunk, encoding, callback) {
-    this.buffer += chunk.toString('utf8');
-    while (this.buffer.length >= 4) {
-      const segment = this.buffer.slice(0, 4);
-      this.buffer = this.buffer.slice(4);
-      const decoded = Buffer.from(segment, 'base64');
-      if (decoded.length > 0) {
-        this.push(decoded);
-      }
-    }
-    callback();
-  }
-
-  _flush(callback) {
-    if (this.buffer) {
-      const decoded = Buffer.from(this.buffer, 'base64');
-      if (decoded.length > 0) {
-        this.push(decoded);
-      }
-    }
-    callback();
-  }
-}
 
 // --------------- LRU Buffer Cache ---------------
 // Avoids re-decoding base64 from MongoDB on every range request.
@@ -394,64 +363,6 @@ router.get('/:id/stream', async (req, res) => {
     stream.pipe(res);
   };
 
-  const streamLegacyBase64 = (base64Data, contentType, fallbackPath) => {
-    return new Promise((resolve, reject) => {
-      const decoder = new Base64DecodeTransform();
-      const diskStream = fallbackPath ? fs.createWriteStream(fallbackPath) : null;
-
-      const cleanup = () => {
-        if (diskStream) {
-          diskStream.removeAllListeners('error');
-        }
-      };
-
-      decoder.on('error', (err) => {
-        cleanup();
-        reject(err);
-      });
-
-      if (diskStream) {
-        diskStream.on('error', (err) => {
-          cleanup();
-          reject(err);
-        });
-      }
-
-      res.on('close', () => {
-        decoder.destroy();
-        if (diskStream) {
-          diskStream.destroy();
-        }
-      });
-
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
-      res.setHeader('ETag', `"${songId}"`);
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Transfer-Encoding': 'chunked'
-      });
-
-      decoder.on('end', () => {
-        cleanup();
-        resolve();
-      });
-
-      decoder.on('finish', () => {
-        if (diskStream) {
-          diskStream.end();
-        }
-      });
-
-      decoder.pipe(res);
-      if (diskStream) {
-        decoder.pipe(diskStream);
-      }
-      decoder.end(base64Data);
-    });
-  };
 
   try {
     console.timeLog(timerLabel, 'db load start');
@@ -524,19 +435,23 @@ router.get('/:id/stream', async (req, res) => {
     const requestPromise = (async () => {
       const fallbackPath = inferDiskPath(legacySong);
       fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
-      console.timeLog(timerLabel, 'base64 stream start');
+      console.timeLog(timerLabel, 'base64 decode start');
+      const fileBuffer = Buffer.from(legacySong.fileData.data, 'base64');
+      console.timeLog(timerLabel, 'base64 decode end', { decodedBytes: fileBuffer.length });
       try {
-        await streamLegacyBase64(legacySong.fileData.data, legacyContentType, fallbackPath);
+        fs.writeFileSync(fallbackPath, fileBuffer);
         try {
           await Song.updateOne({ _id: songId }, { filePath: fallbackPath });
           console.timeLog(timerLabel, 'persisted fallback disk copy', { filePath: fallbackPath });
         } catch (updateErr) {
           console.warn('Failed to persist fallback filePath', updateErr);
         }
-      } catch (streamErr) {
-        console.error('Legacy base64 stream failed', streamErr);
-        throw streamErr;
+      } catch (writeErr) {
+        console.warn('Failed to write fallback disk copy', writeErr);
       }
+      cachePut(songId, fileBuffer, legacyContentType);
+      console.timeLog(timerLabel, 'buffer cached');
+      serveBuffer(req, res, fileBuffer, legacyContentType, songId, timerLabel);
     })();
 
     decodePromises.set(songId, requestPromise);

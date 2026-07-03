@@ -855,7 +855,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     // set crossOrigin and preload so metadata and range requests work reliably
     audio.crossOrigin = 'anonymous';
-    audio.preload = 'metadata';
+    audio.preload = 'auto';
 
     // compare by id to avoid absolute/relative URL differences
     const currentSrc = audio.src || '';
