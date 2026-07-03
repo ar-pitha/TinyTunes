@@ -897,7 +897,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (!Number.isNaN(currentTime) && Math.abs(audio.currentTime - currentTime) > 3) {
         try { audio.currentTime = currentTime; } catch (e) {}
       }
-      if (isPlaying) {
+      if (isPlaying && playbackEnabled && !guestPausedRef.current) {
         const playPromise = audio.play();
         if (playPromise && typeof playPromise.catch === 'function') {
           playPromise.catch((err) => {
@@ -906,7 +906,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             }
           });
         }
-      } else audio.pause();
+      } else if (isPlaying && !playbackEnabled) {
+        console.debug('Skipping guest sync play because playback is not enabled yet');
+      } else {
+        audio.pause();
+      }
     };
 
     if (isNaN(audio.duration) || audio.duration === 0) {
