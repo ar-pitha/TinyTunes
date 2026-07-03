@@ -310,6 +310,7 @@ router.get('/:id/stream', async (req, res) => {
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
         if (start >= total || end >= total) {
+          console.timeEnd(timerLabel);
           return res.status(416).set('Content-Range', `bytes */${total}`).end();
         }
         res.writeHead(206, {
@@ -325,25 +326,28 @@ router.get('/:id/stream', async (req, res) => {
           'Content-Type': contentType
         });
         fs.createReadStream(filePath).pipe(res);
-    console.timeEnd(timerLabel);
       }
+      console.timeEnd(timerLabel);
       return;
     }
 
     console.error('Stream error: no fileData or filePath available for song', songId);
-    return res.status(404).json({ error: 'Audio file not avail, timerLabel) {
-  const total = fileBuffer.length;
-  if (timerLabel) console.timeLog(timerLabel, 'serveBuffer', { totalBytes: total })
+    console.timeEnd(timerLabel);
+    return res.status(404).json({ error: 'Audio file not available for this song' });
+
   } catch (err) {
     console.error('Stream error:', err);
+    console.timeEnd(timerLabel);
     return res.status(500).json({ error: 'Internal Server Error while streaming audio' });
   }
 });
 
 // Shared helper: serve a Buffer with Range support + caching headers
-function serveBuffer(req, res, fileBuffer, contentType, songId) {
+function serveBuffer(req, res, fileBuffer, contentType, songId, timerLabel) {
   const total = fileBuffer.length;
   const range = req.headers.range;
+
+  if (timerLabel) console.timeLog(timerLabel, 'serveBuffer', { totalBytes: total });
 
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
