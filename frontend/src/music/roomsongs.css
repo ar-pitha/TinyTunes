@@ -139,6 +139,45 @@
   animation: slideUp 0.3s ease-out;
 }
 
+.refresh-button {
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.delete-progress-container {
+  margin-top: 8px;
+  width: 100%;
+  min-width: 180px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  height: 10px;
+}
+
+.delete-progress-bar {
+  height: 100%;
+  background: linear-gradient(135deg, #fb7185 0%, #ef4444 100%);
+  transition: width 0.24s ease;
+}
+
+.delete-progress-label {
+  font-size: 0.75rem;
+  color: #374151;
+  margin-top: 6px;
+}
+
 /* ========== Loading State ========== */
 .loading {
   text-align: center;
@@ -487,33 +526,50 @@
 
 /* ========== Playback Controls ========== */
 .controls {
-  display: flex;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   margin-bottom: 2rem;
-  padding: 1.5rem;
+  padding: 1rem;
   background: white;
   border-radius: 1rem;
   border: 1px solid rgba(226, 232, 240, 0.5);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   backdrop-filter: blur(10px);
-  flex-wrap: wrap;
   animation: slideUp 0.3s ease-out;
 }
 
 .controls button {
-  padding: 0.75rem 1.5rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
   border: none;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   cursor: pointer;
   font-weight: 700;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.95rem;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .controls button {
+    font-size: 0.9rem;
+    padding: 0.75rem 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 .controls button:hover:not(:disabled) {

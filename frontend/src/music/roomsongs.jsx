@@ -37,6 +37,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     removeUser,
     removeFromQueue,
     deleteUploadedSong,
+    deleteProgress,
+    refreshAllSongs,
     resolveSongObj,
     handleDeviceFileInput,
     loadDeviceSongs,
@@ -131,7 +133,19 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                       <>
                         <button onClick={() => playNow(s)}>Play Now</button>
                         <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
-                        <button onClick={() => deleteUploadedSong(s._id)} style={{ marginLeft: 8, backgroundColor: '#ef4444', color: '#fff' }}>Delete</button>
+                        <button
+                          onClick={() => deleteUploadedSong(s._id)}
+                          style={{ marginLeft: 8, backgroundColor: '#ef4444', color: '#fff' }}
+                          disabled={deleteProgress[s._id] !== undefined}
+                        >
+                          {deleteProgress[s._id] ? 'Deleting...' : 'Delete'}
+                        </button>
+                        {deleteProgress[s._id] !== undefined && (
+                          <div className="delete-progress-container">
+                            <div className="delete-progress-bar" style={{ width: `${deleteProgress[s._id]}%` }} />
+                            <div className="delete-progress-label">{deleteProgress[s._id]}% deleted</div>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
@@ -391,6 +405,14 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                         onChange={(e) => { setUploadedSearch(e.target.value); setUploadedAlbumPage(1); }}
                         style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', minWidth: 240, flex: '1 1 auto' }}
                       />
+                      <button
+                        type="button"
+                        className="refresh-button"
+                        onClick={refreshAllSongs}
+                        disabled={allSongsLoading}
+                      >
+                        🔄 Refresh
+                      </button>
                       <div style={{ color: '#4b5563', minWidth: 180 }}>
                         {filteredAlbums.length} album{filteredAlbums.length === 1 ? '' : 's'} found
                       </div>

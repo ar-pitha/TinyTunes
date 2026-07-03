@@ -80,6 +80,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   // Upload tracking state: maps contentUri to { status: 'uploading'|'done'|'error', progress: 0-100, message: '' }
   const [uploadingDeviceSongs, setUploadingDeviceSongs] = useState({});
+  const [deleteProgress, setDeleteProgress] = useState({});
 
   const allSongsRef = useRef(allSongs);
   const isHostRef = useRef(isHost);
@@ -605,7 +606,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (!songId) return;
     if (!window.confirm('Delete this uploaded song?')) return;
 
+    setDeleteProgress(prev => ({ ...prev, [songId]: 10 }));
+    const setProgress = (value) => setDeleteProgress(prev => ({ ...prev, [songId]: value }));
+
     try {
+      setProgress(30);
       const res = await fetch(`${API_SONGS}/${songId}`, {
         method: 'DELETE',
         headers: {
@@ -613,6 +618,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
+      setProgress(60);
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Failed to delete song: ${res.status}`);
@@ -630,9 +637,23 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         emitHostPlayback(payload);
         persistPlayback(payload);
       }
+
+      setProgress(100);
+      setTimeout(() => {
+        setDeleteProgress(prev => {
+          const copy = { ...prev };
+          delete copy[songId];
+          return copy;
+        });
+      }, 700);
     } catch (err) {
       console.error('deleteUploadedSong error:', err);
       setError(err.message || 'Failed to delete uploaded song');
+      setDeleteProgress(prev => {
+        const copy = { ...prev };
+        delete copy[songId];
+        return copy;
+      });
     }
   };
 
@@ -1784,6 +1805,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     removeUser,
     removeFromQueue,
     deleteUploadedSong,
+    deleteProgress,
+    refreshAllSongs,
     resolveSongObj,
     handleDeviceFileInput,
     loadDeviceSongs,
