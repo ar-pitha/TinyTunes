@@ -861,6 +861,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     const currentSrc = audio.src || '';
     const alreadyLoaded = currentSrc && streamUrl && String(currentSrc).includes(String(streamUrl));
     if (!alreadyLoaded) {
+      console.log('Guest will load new stream', { streamUrl, shouldPlay, currentSongId: currentSong?._id || currentSong?.id });
       // Priority order for resume time:
       // 1. pendingSeekTimeRef — latency-compensated time from the most recent socket
       //    playback event (most accurate, avoids React state async delay)
@@ -1357,7 +1358,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (!isHost) return;
     if (!audioRef.current) return;
     const newPlaying = !isPlaying;
-    console.debug('togglePlayPause ->', newPlaying);
+    console.log('Host togglePlayPause', { newPlaying, currentSong: currentSong?._id || currentSong?.id, src: audioRef.current.src });
     if (newPlaying) {
       audioRef.current.crossOrigin = 'anonymous';
       audioRef.current.preload = 'metadata';

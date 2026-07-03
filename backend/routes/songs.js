@@ -134,6 +134,12 @@ router.post('/upload', authenticateToken, (req, res) => {
       await song.save();
 
       console.log('Song saved successfully:', song._id);
+      try {
+        cachePut(song._id.toString(), req.file.buffer, req.file.mimetype);
+        console.log('Cached uploaded song bytes for fast first stream:', song._id);
+      } catch (cacheErr) {
+        console.warn('Failed to warm stream cache on upload:', cacheErr);
+      }
 
       res.status(201).json({ 
         message: 'Song uploaded successfully', 
@@ -234,9 +240,12 @@ router.get('/:id/stream', async (req, res) => {
     }
     console.timeLog(timerLabel, 'cache MISS');
 
+    console.timeLog(timerLabel, 'db load start');
     // Select the embedded fileData (if present) and minimal metadata
     const song = await Song.findById(songId).select('fileData filePath metadata originalName fileSize uploadedBy');
+    console.timeLog(timerLabel, 'db load end', { found: !!song });
     if (!song) {
+      console.timeEnd(timerLabel);
       return res.status(404).json({ error: 'Song not found' });
     }
 
