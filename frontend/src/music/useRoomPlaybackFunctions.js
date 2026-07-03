@@ -1701,7 +1701,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         audioPendingRef.current.listener = null;
         return;
       }
-      console.timeLog(audioTimer, 'canplay fired');
+      console.timeLog(audioTimer, 'canplay fired', { currentTime: audio.currentTime });
       // Seek to resume position before playing
       if (startTime > 0) {
         try { audio.currentTime = startTime; } catch (e) {}

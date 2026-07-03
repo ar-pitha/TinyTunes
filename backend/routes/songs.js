@@ -211,6 +211,7 @@ router.get('/:id/stream', async (req, res) => {
   const songId = req.params?.id;
   const timerLabel = `streamSong-${songId}`;
   console.time(timerLabel);
+  console.log('Stream request received', { songId, range: req.headers.range || 'none' });
 
   if (!songId) {
     console.timeEnd(timerLabel);
@@ -347,7 +348,8 @@ function serveBuffer(req, res, fileBuffer, contentType, songId, timerLabel) {
   const total = fileBuffer.length;
   const range = req.headers.range;
 
-  if (timerLabel) console.timeLog(timerLabel, 'serveBuffer', { totalBytes: total });
+  if (timerLabel) console.timeLog(timerLabel, 'serveBuffer', { totalBytes: total, range: range || 'none' });
+  if (timerLabel && range) console.timeLog(timerLabel, 'range request', { range });
 
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
