@@ -1156,8 +1156,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (currentSong && currentSong._id) {
         playedStackRef.current.push(currentSong);
       }
-      const newQ = [...prev, placeholder];
-      try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ)); } catch (e) {}
+      const queued = [...prev, placeholder];
+      const queueToStore = currentSong ? queued : prev;
+      try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(queueToStore)); } catch (e) {}
 
       // If no currentSong, start playing the placeholder immediately (host only)
       if (!currentSong) {
@@ -1168,15 +1169,15 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           if (audioUrl) applyAudioSrc(audioUrl, true);
         }
 
-        const payload = buildPlaybackPayload({ currentSong: placeholder, currentTime: 0, isPlaying: true, queue: newQ });
+        const payload = buildPlaybackPayload({ currentSong: placeholder, currentTime: 0, isPlaying: true, queue: queueToStore });
         emitHostPlayback(payload);
         persistPlayback(payload);
       } else {
-        const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: newQ });
+        const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: queued });
         emitHostPlayback(payload);
         persistPlayback(payload);
       }
-      return newQ;
+      return queueToStore;
     });
 
     // If it's a device song, upload in background and replace the placeholder when done
@@ -1383,16 +1384,6 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     });
   };
 
-  // Attach onEnded listener to audio element to ensure queue auto-play works reliably
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !isHost) return;
-
-    audio.addEventListener('ended', handleEnded);
-    return () => {
-      try { audio.removeEventListener('ended', handleEnded); } catch (e) {}
-    };
-  }, [isHost, handleEnded, queue, currentSong]);
   const onTimeUpdate = () => {
     if (!audioRef.current) return;
     const t = audioRef.current.currentTime;
