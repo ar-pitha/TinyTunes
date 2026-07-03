@@ -6,12 +6,43 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { Transform } = require('stream');
 
 const UPLOAD_AUDIO_DIR = path.resolve(__dirname, '../../uploads/audio');
 if (!fs.existsSync(UPLOAD_AUDIO_DIR)) {
   fs.mkdirSync(UPLOAD_AUDIO_DIR, { recursive: true });
 }
 const decodePromises = new Map();
+
+class Base64DecodeTransform extends Transform {
+  constructor() {
+    super();
+    this.buffer = '';
+  }
+
+  _transform(chunk, encoding, callback) {
+    this.buffer += chunk.toString('utf8');
+    while (this.buffer.length >= 4) {
+      const segment = this.buffer.slice(0, 4);
+      this.buffer = this.buffer.slice(4);
+      const decoded = Buffer.from(segment, 'base64');
+      if (decoded.length > 0) {
+        this.push(decoded);
+      }
+    }
+    callback();
+  }
+
+  _flush(callback) {
+    if (this.buffer) {
+      const decoded = Buffer.from(this.buffer, 'base64');
+      if (decoded.length > 0) {
+        this.push(decoded);
+      }
+    }
+    callback();
+  }
+}
 
 // --------------- LRU Buffer Cache ---------------
 // Avoids re-decoding base64 from MongoDB on every range request.
@@ -277,6 +308,48 @@ router.get('/:id/stream', async (req, res) => {
     return { start, end: Math.min(end, total - 1) };
   };
 
+  const inferDiskPath = (song) => {
+    const ext = path.extname(song.originalName || '').toLowerCase() || '.mp3';
+    return path.join(UPLOAD_AUDIO_DIR, `${songId}${ext}`);
+  };
+
+  const findExistingDiskPath = (song) => {
+    const candidates = [];
+
+    if (song.filePath) {
+      candidates.push(song.filePath);
+    }
+
+    const inferred = inferDiskPath(song);
+    if (inferred) {
+      candidates.push(inferred);
+    }
+
+    if (song.originalName) {
+      const baseName = path.basename(song.originalName, path.extname(song.originalName));
+      candidates.push(path.join(UPLOAD_AUDIO_DIR, `${baseName}`));
+      candidates.push(path.join(UPLOAD_AUDIO_DIR, `${songId}`));
+      candidates.push(path.join(UPLOAD_AUDIO_DIR, `${songId}-${baseName}`));
+    }
+
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    const dirEntries = fs.existsSync(UPLOAD_AUDIO_DIR) ? fs.readdirSync(UPLOAD_AUDIO_DIR) : [];
+    const matching = dirEntries.filter((name) => name.startsWith(`${songId}`) || name.includes(songId));
+    if (matching.length > 0) {
+      const exact = matching.find((name) => fs.existsSync(path.join(UPLOAD_AUDIO_DIR, name)) && fs.statSync(path.join(UPLOAD_AUDIO_DIR, name)).isFile());
+      if (exact) {
+        return path.join(UPLOAD_AUDIO_DIR, exact);
+      }
+    }
+
+    return null;
+  };
+
   const streamFromDisk = (filePath, contentType, rangeInfo) => {
     const stat = fs.statSync(filePath);
     const total = stat.size;
@@ -321,6 +394,65 @@ router.get('/:id/stream', async (req, res) => {
     stream.pipe(res);
   };
 
+  const streamLegacyBase64 = (base64Data, contentType, fallbackPath) => {
+    return new Promise((resolve, reject) => {
+      const decoder = new Base64DecodeTransform();
+      const diskStream = fallbackPath ? fs.createWriteStream(fallbackPath) : null;
+
+      const cleanup = () => {
+        if (diskStream) {
+          diskStream.removeAllListeners('error');
+        }
+      };
+
+      decoder.on('error', (err) => {
+        cleanup();
+        reject(err);
+      });
+
+      if (diskStream) {
+        diskStream.on('error', (err) => {
+          cleanup();
+          reject(err);
+        });
+      }
+
+      res.on('close', () => {
+        decoder.destroy();
+        if (diskStream) {
+          diskStream.destroy();
+        }
+      });
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      res.setHeader('ETag', `"${songId}"`);
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Transfer-Encoding': 'chunked'
+      });
+
+      decoder.on('end', () => {
+        cleanup();
+        resolve();
+      });
+
+      decoder.on('finish', () => {
+        if (diskStream) {
+          diskStream.end();
+        }
+      });
+
+      decoder.pipe(res);
+      if (diskStream) {
+        decoder.pipe(diskStream);
+      }
+      decoder.end(base64Data);
+    });
+  };
+
   try {
     console.timeLog(timerLabel, 'db load start');
     const song = await Song.findById(songId)
@@ -334,16 +466,26 @@ router.get('/:id/stream', async (req, res) => {
     }
 
     const contentType = getContentType(song, song.filePath);
+    const effectivePath = findExistingDiskPath(song);
 
-    if (song.filePath && fs.existsSync(song.filePath)) {
-      const stat = fs.statSync(song.filePath);
+    if (effectivePath) {
+      if (!song.filePath) {
+        try {
+          await Song.updateOne({ _id: songId }, { filePath: effectivePath });
+          console.timeLog(timerLabel, 'recovered missing filePath from disk', { filePath: effectivePath });
+        } catch (updateErr) {
+          console.warn('Failed to persist recovered filePath', updateErr);
+        }
+      }
+
+      const stat = fs.statSync(effectivePath);
       const rangeInfo = range ? parseRange(range, stat.size) : null;
       if (range && !rangeInfo) {
         console.timeEnd(timerLabel);
         return res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
       }
-      console.timeLog(timerLabel, 'stream from disk', { filePath: song.filePath, range: range || 'none' });
-      streamFromDisk(song.filePath, contentType, rangeInfo);
+      console.timeLog(timerLabel, 'stream from disk', { filePath: effectivePath, range: range || 'none' });
+      streamFromDisk(effectivePath, contentType, rangeInfo);
       return;
     }
 
@@ -363,22 +505,38 @@ router.get('/:id/stream', async (req, res) => {
     if (pending) {
       console.timeLog(timerLabel, 'awaiting existing legacy decode');
       await pending;
-      const cachedAgain = cacheGet(songId);
-      if (cachedAgain) {
-        console.timeLog(timerLabel, 'cache HIT after wait', { size: cachedAgain.size });
-        serveBuffer(req, res, cachedAgain.buffer, cachedAgain.contentType, songId, timerLabel);
-        console.timeEnd(timerLabel);
+      const recoveredPath = findExistingDiskPath(legacySong);
+      if (recoveredPath && fs.existsSync(recoveredPath)) {
+        const stat = fs.statSync(recoveredPath);
+        const rangeInfo = range ? parseRange(range, stat.size) : null;
+        if (range && !rangeInfo) {
+          console.timeEnd(timerLabel);
+          return res.status(416).set('Content-Range', `bytes */${stat.size}`).end();
+        }
+        console.timeLog(timerLabel, 'stream from disk after legacy backfill', { filePath: recoveredPath, range: range || 'none' });
+        streamFromDisk(recoveredPath, legacyContentType, rangeInfo);
         return;
       }
+      console.timeEnd(timerLabel);
+      return res.status(500).json({ error: 'Audio stream not ready yet' });
     }
 
     const requestPromise = (async () => {
-      console.timeLog(timerLabel, 'base64 decode start');
-      const fileBuffer = Buffer.from(legacySong.fileData.data, 'base64');
-      console.timeLog(timerLabel, 'base64 decode end', { decodedBytes: fileBuffer.length });
-      cachePut(songId, fileBuffer, legacyContentType);
-      console.timeLog(timerLabel, 'buffer cached');
-      serveBuffer(req, res, fileBuffer, legacyContentType, songId, timerLabel);
+      const fallbackPath = inferDiskPath(legacySong);
+      fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
+      console.timeLog(timerLabel, 'base64 stream start');
+      try {
+        await streamLegacyBase64(legacySong.fileData.data, legacyContentType, fallbackPath);
+        try {
+          await Song.updateOne({ _id: songId }, { filePath: fallbackPath });
+          console.timeLog(timerLabel, 'persisted fallback disk copy', { filePath: fallbackPath });
+        } catch (updateErr) {
+          console.warn('Failed to persist fallback filePath', updateErr);
+        }
+      } catch (streamErr) {
+        console.error('Legacy base64 stream failed', streamErr);
+        throw streamErr;
+      }
     })();
 
     decodePromises.set(songId, requestPromise);
