@@ -36,6 +36,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     playNow,
     removeUser,
     removeFromQueue,
+    deleteUploadedSong,
     resolveSongObj,
     handleDeviceFileInput,
     loadDeviceSongs,
