@@ -979,7 +979,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     // Identify the song using the resolved URL, not only the song ID.
     const currentSrc = audioRef.current?.src || '';
-    const alreadyLoaded = currentSrc && playbackUrl && String(currentSrc).includes(String(playbackUrl));
+    const alreadyLoaded = currentSrc && playbackUrl && isSameAudioUrl(currentSrc, playbackUrl);
     if (!alreadyLoaded) {
       const resumeTime = audioRef.current?.currentTime || 0;
       applyAudioSrc(playbackUrl, isPlaying, resumeTime);
@@ -1067,6 +1067,23 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       queue: buildQueuePayload(overrides.queue ?? queue),
       serverTime: typeof overrides.serverTime === 'number' ? overrides.serverTime : Date.now(),
     };
+  };
+
+  const normalizeAudioUrl = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    try {
+      return new URL(url, typeof window !== 'undefined' ? window.location.href : undefined).href;
+    } catch (e) {
+      return String(url).trim();
+    }
+  };
+
+  const isSameAudioUrl = (currentSrc, candidateUrl) => {
+    if (!currentSrc || !candidateUrl) return false;
+    const a = normalizeAudioUrl(currentSrc);
+    const b = normalizeAudioUrl(candidateUrl);
+    if (a && b && a === b) return true;
+    return String(currentSrc).includes(String(candidateUrl)) || String(candidateUrl).includes(String(currentSrc));
   };
 
   // Helper: emit playback state via socket
@@ -1650,7 +1667,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     // if same source (or contains same identifier), just toggle play/pause
     try {
-      if (audio.src && String(audio.src).includes(url)) {
+      if (audio.src && isSameAudioUrl(audio.src, url)) {
         // If resuming, seek to saved position
         if (startTime > 0 && Math.abs(audio.currentTime - startTime) > 2) {
           try { audio.currentTime = startTime; } catch (e) {}
