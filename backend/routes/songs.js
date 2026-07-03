@@ -209,7 +209,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Stream song file
 router.get('/:id/stream', async (req, res) => {
   const songId = req.params?.id;
-  const timerLabel = `streamSong-${songId}`;
+  const timerLabel = `streamSong-${songId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   console.time(timerLabel);
   console.log('Stream request received', { songId, range: req.headers.range || 'none' });
 
