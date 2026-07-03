@@ -1691,6 +1691,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     // Pause any currently playing audio before switching src
     try { audio.pause(); } catch (e) {}
 
+    const audioTimer = `audioLoad-${url}`;
+    console.time(audioTimer);
     audioPendingRef.current.src = url;
     const onCanPlay = () => {
       // ensure this listener corresponds to the current pending src
@@ -1699,11 +1701,13 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         audioPendingRef.current.listener = null;
         return;
       }
+      console.timeLog(audioTimer, 'canplay fired');
       // Seek to resume position before playing
       if (startTime > 0) {
         try { audio.currentTime = startTime; } catch (e) {}
       }
       safePlay();
+      console.timeEnd(audioTimer);
       try { audio.removeEventListener('canplay', onCanPlay); } catch (e) {}
       audioPendingRef.current.listener = null;
     };
@@ -1715,10 +1719,12 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     try {
       audio.removeAttribute('src');
       audio.src = url;
+      console.timeLog(audioTimer, 'src assigned');
       audio.addEventListener('canplay', onCanPlay);
       audio.load();
     } catch (e) {
       console.warn('applyAudioSrc error', e);
+      console.timeEnd(audioTimer);
     }
   }
 

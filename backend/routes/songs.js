@@ -209,11 +209,16 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Stream song file
 router.get('/:id/stream', async (req, res) => {
   const songId = req.params?.id;
+  const timerLabel = `streamSong-${songId}`;
+  console.time(timerLabel);
+
   if (!songId) {
+    console.timeEnd(timerLabel);
     return res.status(400).json({ error: 'Missing song id in request params' });
   }
 
   if (!mongoose.Types.ObjectId.isValid(songId)) {
+    console.timeEnd(timerLabel);
     return res.status(400).json({ error: 'Invalid Song ID' });
   }
 
@@ -221,8 +226,12 @@ router.get('/:id/stream', async (req, res) => {
     // ---------- Try in-memory cache first (avoid MongoDB + base64 decode) ----------
     const cached = cacheGet(songId);
     if (cached) {
-      return serveBuffer(req, res, cached.buffer, cached.contentType, songId);
+      console.timeLog(timerLabel, 'cache HIT', { size: cached.size });
+      serveBuffer(req, res, cached.buffer, cached.contentType, songId, timerLabel);
+      console.timeEnd(timerLabel);
+      return;
     }
+    console.timeLog(timerLabel, 'cache MISS');
 
     // Select the embedded fileData (if present) and minimal metadata
     const song = await Song.findById(songId).select('fileData filePath metadata originalName fileSize uploadedBy');
@@ -248,13 +257,18 @@ router.get('/:id/stream', async (req, res) => {
         const format = (song.metadata?.format || '').toLowerCase().trim();
         contentType = formatMap[format] || 'audio/mpeg'; // Default to mp3
       }
-      
+
+      console.timeLog(timerLabel, 'base64 decode start');
       const fileBuffer = Buffer.from(song.fileData.data, 'base64');
+      console.timeLog(timerLabel, 'base64 decode end', { decodedBytes: fileBuffer.length });
 
       // Store in cache so next range request won't hit MongoDB
       cachePut(songId, fileBuffer, contentType);
+      console.timeLog(timerLabel, 'buffer cached');
 
-      return serveBuffer(req, res, fileBuffer, contentType, songId);
+      serveBuffer(req, res, fileBuffer, contentType, songId, timerLabel);
+      console.timeEnd(timerLabel);
+      return;
     }
 
     // Fallback: if you store files on disk/path, stream from filesystem
@@ -311,13 +325,15 @@ router.get('/:id/stream', async (req, res) => {
           'Content-Type': contentType
         });
         fs.createReadStream(filePath).pipe(res);
+    console.timeEnd(timerLabel);
       }
       return;
     }
 
     console.error('Stream error: no fileData or filePath available for song', songId);
-    return res.status(404).json({ error: 'Audio file not available for this song' });
-
+    return res.status(404).json({ error: 'Audio file not avail, timerLabel) {
+  const total = fileBuffer.length;
+  if (timerLabel) console.timeLog(timerLabel, 'serveBuffer', { totalBytes: total })
   } catch (err) {
     console.error('Stream error:', err);
     return res.status(500).json({ error: 'Internal Server Error while streaming audio' });
