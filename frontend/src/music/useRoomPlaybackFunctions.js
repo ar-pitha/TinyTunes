@@ -1035,7 +1035,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       currentTime: typeof overrides.currentTime === 'number' ? overrides.currentTime : (audioRef.current ? audioRef.current.currentTime : 0),
       isPlaying: typeof overrides.isPlaying === 'boolean' ? overrides.isPlaying : isPlaying,
       queue: buildQueuePayload(overrides.queue ?? queue),
-      ...(typeof overrides.serverTime === 'number' ? { serverTime: overrides.serverTime } : {}),
+      serverTime: typeof overrides.serverTime === 'number' ? overrides.serverTime : Date.now(),
     };
   };
 
@@ -1268,8 +1268,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           setCurrentSong(prev => {
             if (!prev) return prev;
             if ((prev.id && song.id && prev.id === song.id) || (prev._id && prev._id === uploaded._id)) {
-              // merge to keep any local fields while ensuring _id exists for guests
-              return { ...prev, ...uploaded };
+              return uploaded;
             }
             return prev;
           });
@@ -1531,7 +1530,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(replaced)); } catch (e) {}
             return replaced;
           });
-          setCurrentSong(prev => (prev && prev.id === song.id) ? { ...prev, ...uploaded } : prev);
+          setCurrentSong(prev => (prev && prev.id === song.id) ? uploaded : prev);
 
           const payload = {
             currentSongId: uploaded._id,

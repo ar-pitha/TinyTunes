@@ -671,7 +671,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
       <audio
         ref={audioRef}
-        preload="none"
+        preload="metadata"
         crossOrigin="anonymous"
         onTimeUpdate={onTimeUpdate}
         onEnded={handleEnded}
