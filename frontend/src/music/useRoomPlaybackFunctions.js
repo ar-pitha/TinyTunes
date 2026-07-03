@@ -858,9 +858,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     audio.preload = 'metadata';
 
     // compare by id to avoid absolute/relative URL differences
-    const songIdentifier = currentSong.source === 'device' ? currentSong.id : currentSong._id;
-    const srcIncludesId = audio.src && songIdentifier && String(audio.src).includes(String(songIdentifier));
-    if (!srcIncludesId) {
+    const currentSrc = audio.src || '';
+    const alreadyLoaded = currentSrc && streamUrl && String(currentSrc).includes(String(streamUrl));
+    if (!alreadyLoaded) {
       // Priority order for resume time:
       // 1. pendingSeekTimeRef — latency-compensated time from the most recent socket
       //    playback event (most accurate, avoids React state async delay)
@@ -976,11 +976,12 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       return;
     }
 
-    // Identify the song: use id (device) or _id (uploaded)
-    const songIdentifier = currentSong.source === 'device' ? currentSong.id : currentSong._id;
-    const srcIncludesId = audioRef.current.src && songIdentifier && String(audioRef.current.src).includes(String(songIdentifier));
-    if (!srcIncludesId) {
-      applyAudioSrc(streamUrl, isPlaying);
+    // Identify the song using the resolved URL, not only the song ID.
+    const currentSrc = audioRef.current?.src || '';
+    const alreadyLoaded = currentSrc && streamUrl && String(currentSrc).includes(String(streamUrl));
+    if (!alreadyLoaded) {
+      const resumeTime = audioRef.current?.currentTime || 0;
+      applyAudioSrc(streamUrl, isPlaying, resumeTime);
     }
 
     const onLoadedMetaHost = () => {
@@ -1286,10 +1287,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           });
 
           // If currentSong is the placeholder, update it to the uploaded song (keep playback)
+          const currentPlaybackTime = audioRef.current ? audioRef.current.currentTime : 0;
           setCurrentSong(prev => {
             if (!prev) return prev;
             if ((prev.id && song.id && prev.id === song.id) || (prev._id && prev._id === uploaded._id)) {
-              return uploaded;
+              return { ...uploaded, source: 'uploaded', currentTime: currentPlaybackTime };
             }
             return prev;
           });
@@ -1299,7 +1301,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             const q = (queue || []);
             const payload = buildPlaybackPayload({
               currentSong: (currentSong && ((currentSong.id && currentSong.id === song.id) ? { ...currentSong, ...uploaded } : currentSong)) || { ...uploaded, source: 'uploaded' },
-              currentTime: audioRef.current ? audioRef.current.currentTime : 0,
+              currentTime: currentPlaybackTime,
               isPlaying,
               queue: q,
             });
