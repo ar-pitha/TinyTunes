@@ -1668,8 +1668,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     // if same source (or contains same identifier), just toggle play/pause
     try {
       if (audio.src && isSameAudioUrl(audio.src, url)) {
-        // If resuming, seek to saved position
-        if (startTime > 0 && Math.abs(audio.currentTime - startTime) > 2) {
+        // If resuming, seek to saved position. Use a tighter threshold for host/guest
+        // recovery in case the audio element has just reloaded or reset to 0.
+        if (startTime > 0 && Math.abs(audio.currentTime - startTime) > 0.5) {
           try { audio.currentTime = startTime; } catch (e) {}
         }
         if (shouldPlay) {
