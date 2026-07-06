@@ -1,6 +1,9 @@
 import React from 'react';
 import { useRoomPlayback, formatTime } from './useRoomPlaybackFunctions';
 import './roomsongs.css';
+import PlaylistPanel from '../components/PlaylistPanel';
+import QueuePanel from '../components/QueuePanel';
+import HostRequestPanel from '../components/HostRequestPanel';
 
 const Room = ({ roomCode, onLeaveRoom, userId }) => {
   const {
@@ -284,21 +287,18 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
           }
         >
           {isHost
-            ? (isPlaying ? '⏸️ Pause' : '▶️ Play')
-            : (guestPaused ? '▶️ Rejoin Live' : (isPlaying ? '⏸ Pause (just me)' : '▶️ Play'))
-          }
-        </button>
-        {!isHost && guestPaused && (
-          <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 4, textAlign: 'center', gridColumn: '1 / -1' }}>
-            ⏸ Your audio is paused locally — the room is still playing
+        {/* Panels: Queue, Playlist, Requests */}
+        <div className="panels-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <QueuePanel roomCode={roomCode} socket={socketRef.current} />
           </div>
-        )}
-        <button onClick={() => seekBy(10)} disabled={!isHost} title="Forward 10s">
-          {isHost ? '10s' : 'Forward (Host only)'} ⏩
-        </button>
-        <button onClick={skipNext} disabled={!isHost} title="Next Track">
-          {isHost ? 'Next' : 'Next (Host only)'} ⏭️
-        </button>
+          <div style={{ flex: 1 }}>
+            <PlaylistPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
+          </div>
+          <div style={{ width: 360 }}>
+            <HostRequestPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
+          </div>
+        </div>
       </div>
 
       {playbackError && (
