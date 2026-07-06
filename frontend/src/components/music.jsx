@@ -823,16 +823,29 @@ const App = ({ token, user }) => {
                           className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
                           onClick={() => {
                             if (song.url) {
-                              setCurrentSong(song);
-                              // Sync playback for room (only for backend songs)
-                              if (isHost && room && playlist.find(s => s.id === song.id)) {
-                                socketRef.current.emit('sync-playback', {
-                                  roomCode: room.code,
-                                  song: song,
-                                  currentTime: 0,
-                                  isPlaying: true
-                                });
+                              const isCurrentSong = currentSong?.id === song.id;
+                              
+                              // If no song is playing, start playing this one
+                              if (!currentSong) {
+                                setCurrentSong(song);
+                                setQueue([song]);
+                                setQueueIndex(0);
+                                // Sync playback for room
+                                if (isHost && room) {
+                                  socketRef.current.emit('sync-playback', {
+                                    roomCode: room.code,
+                                    song: song,
+                                    currentTime: 0,
+                                    isPlaying: true
+                                  });
+                                }
+                              } else if (!isCurrentSong) {
+                                // If clicking on a different song while one is playing, add to queue
+                                const newQueue = [...queue, song];
+                                setQueue(newQueue);
+                                // Don't emit sync-playback, just queue it silently
                               }
+                              // If clicking the current song, just toggle play/pause
                             }
                           }}
                           style={{ opacity: song.url ? 1 : 0.5, pointerEvents: song.url ? 'auto' : 'none' }}
