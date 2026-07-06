@@ -6,7 +6,14 @@ import '../components/music.css'; // Assuming you have a CSS file for styling
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
-const App = ({ token, user }) => {
+// Context providers and integration
+import { QueueProvider, useQueue } from '../contexts/QueueContext';
+import { PlaylistProvider } from '../contexts/PlaylistContext';
+import { PlayRequestProvider, usePlayRequest } from '../contexts/PlayRequestContext';
+import { PlaybackProvider, usePlayback } from '../contexts/PlaybackContext';
+import Player from './Player';
+
+const InnerApp = ({ token, user }) => {
   const [currentSong, setCurrentSong] = useState(null);
   const [playlist, setPlaylist] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -38,62 +45,30 @@ const App = ({ token, user }) => {
   const [queue, setQueue] = useState([]);
   const [queueIndex, setQueueIndex] = useState(0);
 
-  const audioRef = useRef(null);
+  // audio element is managed by Player component via playback integration
   const fileInputRef = useRef(null);
   const socketRef = useRef(null);
 
-  // Initialize socket connection
+  // Context hooks (available when InnerApp is rendered inside providers)
+  const queueCtx = useQueue();
+  const playRequestCtx = usePlayRequest();
+  const playbackCtx = usePlayback();
+
+
+  // Initialize socket connection (minimal listeners here)
   useEffect(() => {
     socketRef.current = io(BACKEND_URL);
-    
-    socketRef.current.on('room-joined', (data) => {
-      setRoom(data.room);
-      setRoomUsers(data.users);
-      setIsHost(data.isHost);
-    });
-    
-    socketRef.current.on('room-users-updated', (users) => {
-      setRoomUsers(users);
-    });
-    
-    socketRef.current.on('sync-playback', (data) => {
-      if (!isHost) {
-        setCurrentSong(data.song);
-        setCurrentTime(data.currentTime);
-        setIsPlaying(data.isPlaying);
-        if (audioRef.current) {
-          audioRef.current.currentTime = data.currentTime;
-          if (data.isPlaying) {
-            audioRef.current.play();
-          } else {
-            audioRef.current.pause();
-          }
-        }
-      }
-    });
-    
-    return () => socketRef.current.disconnect();
-  }, [isHost]);
 
-  // Audio event handlers
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const updateTime = () => setCurrentTime(audio.currentTime);
-    const updateDuration = () => setDuration(audio.duration);
-    const handleEnded = () => handleNext();
-
-    audio.addEventListener('timeupdate', updateTime);
-    audio.addEventListener('loadedmetadata', updateDuration);
-    audio.addEventListener('ended', handleEnded);
+    // leave detailed event handling to integration hook / contexts
 
     return () => {
-      audio.removeEventListener('timeupdate', updateTime);
-      audio.removeEventListener('loadedmetadata', updateDuration);
-      audio.removeEventListener('ended', handleEnded);
+      try { socketRef.current.disconnect(); } catch (e) {}
     };
-  }, [currentSong]);
+  }, []);
+
+  // Playback integration will be initialized in the next step (Phase 6)
+
+  // Audio event handlers are managed by Player integration
 
   // Initialize queue when current song changes
   useEffect(() => {
@@ -295,24 +270,38 @@ const App = ({ token, user }) => {
   };
 
   // Playback controls
-  // Helper function to safely add song to queue while preserving playback
-  const addToQueue = (song) => {
+  // Helper function to safely add song to queue or create a play request
+  // Uses Queue and PlayRequest contexts when available (wired in wrapper)
+  const defaultAddToQueue = async (song) => {
     if (!song || !currentSong) {
-      // If no current song, just set it directly
       setCurrentSong(song);
       setQueue([song]);
       setQueueIndex(0);
       return;
     }
-    
-    // Use functional setState to avoid stale closure issues
-    setQueue(prevQueue => {
-      // Make sure current song is always the first in queue
-      if (prevQueue.length === 0) {
-        return [currentSong, song];
+    // If we have queue context and user is host, use server-backed queue
+    if (queueCtx && queueCtx.addToQueue && token && room) {
+      try {
+        await queueCtx.addToQueue(song, room.code, token);
+        return;
+      } catch (err) {
+        console.warn('Queue add failed, falling back to local queue', err);
       }
-      
-      // Append new song to existing queue
+    }
+
+    // If not host, create a play request instead (if possible)
+    if (!isHost && playRequestCtx && playRequestCtx.createPlayRequest && token && room) {
+      try {
+        await playRequestCtx.createPlayRequest(song, room.code, token);
+        return;
+      } catch (err) {
+        console.warn('Play request failed, falling back to local queue', err);
+      }
+    }
+
+    // Fallback: local queue update
+    setQueue(prevQueue => {
+      if (prevQueue.length === 0) return [currentSong, song];
       return [...prevQueue, song];
     });
   };
@@ -324,17 +313,18 @@ const App = ({ token, user }) => {
     setIsPlaying(newIsPlaying);
     
     if (newIsPlaying) {
-      audioRef.current.play();
+      // audio is now handled by Player integration
     } else {
-      audioRef.current.pause();
+      // audio is now handled by Player integration
     }
     
-    // Sync with room if host
+    // Sync with room if host (use playback context time if available)
     if (isHost && room) {
+      const time = (playbackCtx && playbackCtx.currentTime) || currentTime || 0;
       socketRef.current.emit('sync-playback', {
         roomCode: room.code,
         song: currentSong,
-        currentTime: audioRef.current.currentTime,
+        currentTime: time,
         isPlaying: newIsPlaying
       });
     }
@@ -432,7 +422,10 @@ const App = ({ token, user }) => {
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
     setCurrentTime(newTime);
-    audioRef.current.currentTime = newTime;
+    // Seek via playback context if host, otherwise update UI only
+    if (isHost && playbackCtx && playbackCtx.seekTo && room) {
+      playbackCtx.seekTo(newTime, room.code, token).catch(err => console.warn('Seek failed', err));
+    }
     
     // Sync with room if host
     if (isHost && room) {
@@ -551,7 +544,6 @@ const App = ({ token, user }) => {
 
   return (
     <div className={`app ${darkMode ? 'dark' : ''}`}>
-      <audio ref={audioRef} src={currentSong?.url} preload="none" />
       
       {/* Hidden file input for uploads */}
       <input
@@ -947,6 +939,21 @@ const App = ({ token, user }) => {
         </div>
       )}
     </div>
+  );
+};
+
+const App = (props) => {
+  return (
+    <PlaybackProvider>
+      <QueueProvider>
+        <PlaylistProvider>
+          <PlayRequestProvider>
+            <Player roomCode={props.roomCode} token={props.token} isHost={props.isHost} />
+            <InnerApp {...props} />
+          </PlayRequestProvider>
+        </PlaylistProvider>
+      </QueueProvider>
+    </PlaybackProvider>
   );
 };
 

@@ -326,4 +326,771 @@ router.delete('/:code', authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ============ QUEUE ENDPOINTS ============
+
+// Add song to queue
+router.post('/:code/queue/add', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { songId, title, artist, album, duration, source } = req.body;
+
+    if (!songId || !title || !artist) {
+      return res.status(400).json({ error: 'songId, title, and artist are required' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    const newQueueItem = {
+      _id: new mongoose.Types.ObjectId(),
+      songId,
+      title,
+      artist,
+      album: album || '',
+      duration: duration || 0,
+      source: source || 'Uploaded',
+      addedBy: userId,
+      addedAt: new Date(),
+      order: room.queue.length
+    };
+
+    room.queue.push(newQueueItem);
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.status(201).json({ message: 'Song added to queue', queueItem: newQueueItem });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove song from queue
+router.delete('/:code/queue/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const { code, itemId } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    // Only host or the user who added it can remove
+    const queueItem = room.queue.find(item => item._id.toString() === itemId);
+    if (!queueItem) {
+      return res.status(404).json({ error: 'Queue item not found' });
+    }
+
+    if (room.host.toString() !== userId.toString() && queueItem.addedBy.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host or the user who added the song can remove it' });
+    }
+
+    room.queue = room.queue.filter(item => item._id.toString() !== itemId);
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Song removed from queue' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reorder queue
+router.put('/:code/queue/reorder', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { newOrder } = req.body;
+
+    if (!Array.isArray(newOrder)) {
+      return res.status(400).json({ error: 'newOrder must be an array of item IDs' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can reorder queue
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can reorder queue' });
+    }
+
+    // Validate all IDs exist
+    for (let id of newOrder) {
+      if (!room.queue.some(item => item._id.toString() === id)) {
+        return res.status(400).json({ error: `Queue item not found: ${id}` });
+      }
+    }
+
+    // Reorder based on newOrder array
+    const reorderedQueue = newOrder.map((id, index) => {
+      const item = room.queue.find(item => item._id.toString() === id);
+      item.order = index;
+      return item;
+    });
+
+    room.queue = reorderedQueue;
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Queue reordered successfully', queue: room.queue });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get queue
+router.get('/:code/queue', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode })
+      .populate('queue.addedBy', 'username');
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    res.json({ queue: room.queue });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear queue
+router.delete('/:code/queue', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can clear queue
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can clear queue' });
+    }
+
+    room.queue = [];
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Queue cleared successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ PLAYLIST ENDPOINTS ============
+
+// Add song to playlist
+router.post('/:code/playlist/add', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { songId, title, artist, album, duration, source } = req.body;
+
+    if (!songId || !title || !artist) {
+      return res.status(400).json({ error: 'songId, title, and artist are required' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    const newPlaylistItem = {
+      _id: new mongoose.Types.ObjectId(),
+      songId,
+      title,
+      artist,
+      album: album || '',
+      duration: duration || 0,
+      source: source || 'Uploaded',
+      addedBy: userId,
+      addedAt: new Date(),
+      order: room.playlist.length
+    };
+
+    room.playlist.push(newPlaylistItem);
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.status(201).json({ message: 'Song added to playlist', playlistItem: newPlaylistItem });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove song from playlist
+router.delete('/:code/playlist/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const { code, itemId } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    // Only host can remove from playlist
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can remove from playlist' });
+    }
+
+    const playlistItem = room.playlist.find(item => item._id.toString() === itemId);
+    if (!playlistItem) {
+      return res.status(404).json({ error: 'Playlist item not found' });
+    }
+
+    room.playlist = room.playlist.filter(item => item._id.toString() !== itemId);
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Song removed from playlist' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reorder playlist
+router.put('/:code/playlist/reorder', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { newOrder } = req.body;
+
+    if (!Array.isArray(newOrder)) {
+      return res.status(400).json({ error: 'newOrder must be an array of item IDs' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can reorder playlist
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can reorder playlist' });
+    }
+
+    // Validate all IDs exist
+    for (let id of newOrder) {
+      if (!room.playlist.some(item => item._id.toString() === id)) {
+        return res.status(400).json({ error: `Playlist item not found: ${id}` });
+      }
+    }
+
+    // Reorder based on newOrder array
+    const reorderedPlaylist = newOrder.map((id, index) => {
+      const item = room.playlist.find(item => item._id.toString() === id);
+      item.order = index;
+      return item;
+    });
+
+    room.playlist = reorderedPlaylist;
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Playlist reordered successfully', playlist: room.playlist });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get playlist
+router.get('/:code/playlist', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode })
+      .populate('playlist.addedBy', 'username');
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    res.json({ playlist: room.playlist });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Search playlist
+router.get('/:code/playlist/search', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { query } = req.query;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode })
+      .populate('playlist.addedBy', 'username');
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    const lowerQuery = query.toLowerCase();
+    const results = room.playlist.filter(item =>
+      item.title.toLowerCase().includes(lowerQuery) ||
+      item.artist.toLowerCase().includes(lowerQuery)
+    );
+
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ PLAYBACK CONTROL ENDPOINTS ============
+
+// Play song from queue or playlist
+router.post('/:code/playback/play', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { songId, source, index } = req.body;
+
+    if (!songId || !source) {
+      return res.status(400).json({ error: 'songId and source (Queue or Playlist) are required' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can control playback
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    // Update playback state
+    room.playback.currentSongId = songId;
+    room.playback.currentSource = source;
+    room.playback.currentQueueIndex = source === 'Queue' ? (index || 0) : -1;
+    room.playback.currentPlaylistIndex = source === 'Playlist' ? (index || 0) : -1;
+    room.playback.currentTime = 0;
+    room.playback.isPlaying = true;
+    room.playback.lastUpdated = new Date();
+    room.playback.syncTimestamp = Date.now();
+
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Playback started', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Pause playback
+router.post('/:code/playback/pause', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    room.playback.isPlaying = false;
+    room.playback.lastUpdated = new Date();
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Playback paused', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resume playback
+router.post('/:code/playback/resume', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    room.playback.isPlaying = true;
+    room.playback.lastUpdated = new Date();
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Playback resumed', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Seek to position
+router.post('/:code/playback/seek', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { currentTime } = req.body;
+
+    if (typeof currentTime !== 'number') {
+      return res.status(400).json({ error: 'currentTime must be a number' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    room.playback.currentTime = Math.max(0, currentTime);
+    room.playback.lastUpdated = new Date();
+    room.playback.syncTimestamp = Date.now();
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Playback seeked', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Skip to next song
+router.post('/:code/playback/next', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    // Playback priority: Queue → Playlist
+    if (room.queue.length > 0 && room.playback.currentSource === 'Queue') {
+      const nextIndex = room.playback.currentQueueIndex + 1;
+      if (nextIndex < room.queue.length) {
+        room.playback.currentQueueIndex = nextIndex;
+        const nextSong = room.queue[nextIndex];
+        room.playback.currentSongId = nextSong.songId;
+        room.playback.currentTime = 0;
+      } else {
+        // Queue finished, switch to playlist
+        if (room.playlist.length > 0) {
+          room.playback.currentSource = 'Playlist';
+          room.playback.currentPlaylistIndex = 0;
+          const nextSong = room.playlist[0];
+          room.playback.currentSongId = nextSong.songId;
+          room.playback.currentQueueIndex = -1;
+          room.playback.currentTime = 0;
+        } else {
+          room.playback.currentSongId = null;
+          room.playback.isPlaying = false;
+        }
+      }
+    } else if (room.playlist.length > 0) {
+      const nextIndex = room.playback.currentPlaylistIndex + 1;
+      if (nextIndex < room.playlist.length) {
+        room.playback.currentPlaylistIndex = nextIndex;
+        room.playback.currentSource = 'Playlist';
+        const nextSong = room.playlist[nextIndex];
+        room.playback.currentSongId = nextSong.songId;
+        room.playback.currentTime = 0;
+      } else {
+        room.playback.currentSongId = null;
+        room.playback.isPlaying = false;
+      }
+    } else {
+      room.playback.currentSongId = null;
+      room.playback.isPlaying = false;
+    }
+
+    room.playback.lastUpdated = new Date();
+    room.playback.syncTimestamp = Date.now();
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Skipped to next song', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Skip to previous song
+router.post('/:code/playback/previous', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can control playback' });
+    }
+
+    // Playback priority: Queue → Playlist
+    if (room.queue.length > 0 && room.playback.currentSource === 'Queue') {
+      const prevIndex = room.playback.currentQueueIndex - 1;
+      if (prevIndex >= 0) {
+        room.playback.currentQueueIndex = prevIndex;
+        const prevSong = room.queue[prevIndex];
+        room.playback.currentSongId = prevSong.songId;
+        room.playback.currentTime = 0;
+      }
+    } else if (room.playlist.length > 0) {
+      const prevIndex = room.playback.currentPlaylistIndex - 1;
+      if (prevIndex >= 0) {
+        room.playback.currentPlaylistIndex = prevIndex;
+        room.playback.currentSource = 'Playlist';
+        const prevSong = room.playlist[prevIndex];
+        room.playback.currentSongId = prevSong.songId;
+        room.playback.currentTime = 0;
+      }
+    }
+
+    room.playback.lastUpdated = new Date();
+    room.playback.syncTimestamp = Date.now();
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Skipped to previous song', playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get current playback state
+router.get('/:code/playback', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    res.json({ playback: room.playback });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ PLAY REQUEST ENDPOINTS ============
+
+// Create play request (guests request a song)
+router.post('/:code/play-requests', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { songId, title, artist, album, duration, source, notes } = req.body;
+
+    if (!songId || !title || !artist) {
+      return res.status(400).json({ error: 'songId, title, and artist are required' });
+    }
+
+    const room = await Room.findOne({ code: normalizedCode })
+      .populate('host', 'username');
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    // Guests cannot make requests if they are the host
+    if (room.host._id.toString() === userId.toString()) {
+      return res.status(403).json({ error: 'Host cannot request songs' });
+    }
+
+    const user = await User.findById(userId);
+
+    const newRequest = {
+      _id: new mongoose.Types.ObjectId(),
+      songId,
+      requestedBy: userId,
+      requestedByName: user.username,
+      songTitle: title,
+      songArtist: artist,
+      source: source || 'Uploaded',
+      status: 'Pending',
+      createdAt: new Date(),
+      notes: notes || null
+    };
+
+    room.playRequests.push(newRequest);
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.status(201).json({ message: 'Play request created', request: newRequest });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get play requests for a room
+router.get('/:code/play-requests', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { status } = req.query;
+
+    const room = await Room.findOne({ code: normalizedCode })
+      .populate('playRequests.requestedBy', 'username');
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!room.users.some(id => id.toString() === userId.toString())) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+
+    let requests = room.playRequests;
+
+    // Filter by status if provided
+    if (status) {
+      requests = requests.filter(req => req.status === status);
+    }
+
+    res.json({ requests });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Approve play request (host only)
+router.put('/:code/play-requests/:requestId/approve', authenticateToken, async (req, res) => {
+  try {
+    const { code, requestId } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can approve
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can approve requests' });
+    }
+
+    const request = room.playRequests.find(req => req._id.toString() === requestId);
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    // Add to queue
+    const queueItem = {
+      _id: new mongoose.Types.ObjectId(),
+      songId: request.songId,
+      title: request.songTitle,
+      artist: request.songArtist,
+      album: request.songAlbum || '',
+      duration: request.duration || 0,
+      source: request.source,
+      addedBy: request.requestedBy,
+      addedAt: new Date(),
+      order: room.queue.length
+    };
+
+    room.queue.push(queueItem);
+
+    // Update request status
+    request.status = 'Accepted';
+    request.respondedAt = new Date();
+    request.respondedBy = userId;
+
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Request approved and added to queue', queueItem });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reject play request (host only)
+router.put('/:code/play-requests/:requestId/reject', authenticateToken, async (req, res) => {
+  try {
+    const { code, requestId } = req.params;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const userId = req.user.id;
+    const { reason } = req.body;
+
+    const room = await Room.findOne({ code: normalizedCode });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Only host can reject
+    if (room.host.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only host can reject requests' });
+    }
+
+    const request = room.playRequests.find(req => req._id.toString() === requestId);
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    // Update request status
+    request.status = 'Rejected';
+    request.respondedAt = new Date();
+    request.respondedBy = userId;
+    request.rejectionReason = reason || null;
+
+    room.updatedAt = new Date();
+    await room.save();
+
+    res.json({ message: 'Request rejected', request });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
