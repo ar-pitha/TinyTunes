@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Home from './roomhome';
 import Room from './roomsongs';
 import './roomsongs.css';
+import { QueueProvider } from '../contexts/QueueContext';
+import { PlaylistProvider } from '../contexts/PlaylistContext';
+import { PlayRequestProvider } from '../contexts/PlayRequestContext';
+import { PlaybackProvider } from '../contexts/PlaybackContext';
 
 const ROOM_STORAGE_KEY = 'joinedRoomCode';
 
@@ -84,11 +88,19 @@ const Roommanagement = () => {
       {!joinedRoomCode ? (
         <Home onJoinRoom={handleJoinRoom} />
       ) : (
-        <Room
-          roomCode={joinedRoomCode}
-          onLeaveRoom={handleLeaveRoom}
-          userId={userId}
-        />
+        <QueueProvider>
+          <PlaylistProvider>
+            <PlayRequestProvider>
+              <PlaybackProvider>
+                <Room
+                  roomCode={joinedRoomCode}
+                  onLeaveRoom={handleLeaveRoom}
+                  userId={userId}
+                />
+              </PlaybackProvider>
+            </PlayRequestProvider>
+          </PlaylistProvider>
+        </QueueProvider>
       )}
     </div>
   );
