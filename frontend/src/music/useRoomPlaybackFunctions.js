@@ -1053,10 +1053,11 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   const buildPlaybackPayload = (overrides = {}) => {
     const song = overrides.currentSong ?? currentSong ?? null;
-    const songId = song ? (song._id || song.id || null) : null;
+    const songId = song ? (song.songId || song._id || song.id || null) : null;
     const songPayload = song ? {
       _id: songId,
-      id: song.id || songId,
+      id: songId,
+      songId,
       title: song.title || 'Unknown',
       artist: song.artist || 'Unknown Artist',
       album: song.album || 'Unknown Album',
@@ -1277,15 +1278,15 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         playedStackRef.current.push(currentSong);
       }
       const queued = [...prev, placeholder];
-      const queueToStore = currentSong ? queued : prev;
+      const shouldAutoPlay = !currentSong && prev.length === 0;
+      const queueToStore = shouldAutoPlay ? prev : queued;
       try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(queueToStore)); } catch (e) {}
 
-      // If no currentSong, start playing the placeholder immediately (host only)
-      if (!currentSong) {
+      if (shouldAutoPlay) {
         setCurrentSong(placeholder);
         setIsPlaying(true);
         if (audioRef.current) {
-          const audioUrl = isDevice ? resolveSongUrl(placeholder) : `${API_SONGS}/${placeholder._id}/stream`;
+          const audioUrl = resolveSongUrl(placeholder);
           if (audioUrl) applyAudioSrc(audioUrl, true);
         }
 
@@ -1293,7 +1294,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         emitHostPlayback(payload);
         persistPlayback(payload);
       } else {
-        const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: queued });
+        const payload = buildPlaybackPayload({ currentSong: currentSong || null, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: queueToStore });
         emitHostPlayback(payload);
         persistPlayback(payload);
       }
@@ -1631,11 +1632,12 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   };
 
   // Host: play now
-  const playNow = async (song) => {
+  const playNow = async (song, { removeFromQueue = false, queueOverride = null } = {}) => {
     if (!isHost) return;
     
     let songToPlay = song;
     const isDevice = song && song.source === 'device';
+    const queueSource = Array.isArray(queueOverride) ? queueOverride : queue;
 
     if (isDevice) {
       // Play device song locally immediately (host can play local contentUri/blob)
@@ -1674,7 +1676,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
             },
             currentTime: audioRef.current ? audioRef.current.currentTime : 0,
             isPlaying,
-            queue: buildQueuePayload([])
+            queue: buildQueuePayload(queueSource)
           };
           emitHostPlayback(payload);
           persistPlayback(payload);
@@ -1688,7 +1690,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     if (currentSong && currentSong._id) {
       playedStackRef.current.push(currentSong);
     }
-    setQueue([]);
+
+    const nextQueue = removeFromQueue ? queueSource.slice(1) : queueSource;
+    setQueue(nextQueue);
     setCurrentSong(songToPlay);
     setIsPlaying(true);
     if (audioRef.current) {
@@ -1696,7 +1700,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       if (src) applyAudioSrc(src, true);
     }
 
-    const payload = buildPlaybackPayload({ currentSong: songToPlay, currentTime: 0, isPlaying: true, queue: [] });
+    const payload = buildPlaybackPayload({ currentSong: songToPlay, currentTime: 0, isPlaying: true, queue: nextQueue });
     emitHostPlayback(payload);
     persistPlayback(payload);
   };

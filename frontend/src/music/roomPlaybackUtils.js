@@ -8,6 +8,7 @@ export const resolveSongUrl = (song) => {
   // Prefer an explicit songId (e.g., queue items store underlying songId)
   if (song.songId) return `${API_SONGS}/${song.songId}/stream`;
   if (song._id) return `${API_SONGS}/${song._id}/stream`;
+  if (song.id) return `${API_SONGS}/${song.id}/stream`;
   if (song.source === 'device' && song.url) return song.url;
   if (song.contentUri) return Capacitor.convertFileSrc(song.contentUri);
   return null;
@@ -47,12 +48,14 @@ export function formatTime(seconds) {
 export const buildQueuePayload = (q = []) => {
   return (q || []).map((s) => {
     if (typeof s === 'string') {
-      return { _id: s, id: s, title: '(unknown)', artist: '', source: 'uploaded' };
+      return { _id: s, id: s, songId: s, title: '(unknown)', artist: '', source: 'uploaded' };
     }
-    const id = s?._id || s?.id || null;
+    const songId = s?.songId || s?._id || s?.id || null;
+    const id = s?._id || s?.id || songId;
     return {
       _id: id,
-      id: s?.id || id,
+      id,
+      songId,
       title: s?.title || '(unknown)',
       artist: s?.artist || '',
       album: s?.album || '',

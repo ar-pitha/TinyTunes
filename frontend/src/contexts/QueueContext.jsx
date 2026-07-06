@@ -23,12 +23,13 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/add`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
+          headers,
           body: JSON.stringify({
             songId: song.id || song._id,
             title: song.title,
@@ -44,6 +45,7 @@ export const QueueProvider = ({ children }) => {
         }
 
         const data = await response.json();
+        setQueue(prev => [...prev, data.queueItem]);
         resolve(data.queueItem);
       } catch (err) {
         setError(err.message);
@@ -63,12 +65,13 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/${itemId}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -96,12 +99,13 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/reorder`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
+          headers,
           body: JSON.stringify({ newOrder })
         });
 
@@ -130,11 +134,11 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        const headers = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
         const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue`, {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -162,12 +166,13 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
+          headers
         });
 
         if (!response.ok) {

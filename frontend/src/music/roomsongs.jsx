@@ -314,10 +314,10 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                 return alert('Queue is empty');
               }
               const first = q[0];
-              // Use playNow to set currentSong locally and emit playback
+              // Use playNow to set currentSong locally, emit playback, and dequeue the item
               if (isHost && playNow) {
                 // Normalize object: playNow expects song object with _id or id
-                await playNow(first);
+                await playNow(first, { removeFromQueue: true, queueOverride: q });
               } else {
                 // Fallback: emit hostPlayback so server broadcasts
                 const playback = {
@@ -332,7 +332,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                   },
                   currentTime: 0,
                   isPlaying: true,
-                  queue: q,
+                  queue: q.slice(1),
                   serverTime: Date.now(),
                 };
                 socket?.emit('hostPlayback', { roomCode, playback });
