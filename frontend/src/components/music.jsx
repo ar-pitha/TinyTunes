@@ -267,6 +267,29 @@ const App = ({ token, user }) => {
   };
 
   // Playback controls
+  // Helper function to safely add song to queue while preserving playback
+  const addToQueue = (song) => {
+    if (!song) return;
+    
+    // If no current song, start playing this one
+    if (!currentSong) {
+      setCurrentSong(song);
+      setQueue([song]);
+      setQueueIndex(0);
+      return;
+    }
+    
+    // If current song is already in queue, just append the new song
+    if (queue.length > 0) {
+      setQueue([...queue, song]);
+      return;
+    }
+    
+    // If queue is empty but we have a current song, rebuild queue with current song first
+    const newQueue = [currentSong, song];
+    setQueue(newQueue);
+  };
+
   const togglePlay = () => {
     if (!currentSong) return;
     
@@ -672,18 +695,7 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => {
-                        // If no song is playing, start playing this one
-                        if (!currentSong) {
-                          setCurrentSong(song);
-                          setQueue([song]);
-                          setQueueIndex(0);
-                        } else {
-                          // Otherwise, add to queue
-                          const newQueue = [...queue, song];
-                          setQueue(newQueue);
-                        }
-                      }}
+                      onClick={() => addToQueue(song)}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -721,18 +733,7 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => {
-                        // If no song is playing, start playing this one
-                        if (!currentSong) {
-                          setCurrentSong(song);
-                          setQueue([song]);
-                          setQueueIndex(0);
-                        } else {
-                          // Otherwise, add to queue
-                          const newQueue = [...queue, song];
-                          setQueue(newQueue);
-                        }
-                      }}
+                      onClick={() => addToQueue(song)}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -759,18 +760,7 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => {
-                        // If no song is playing, start playing this one
-                        if (!currentSong) {
-                          setCurrentSong(song);
-                          setQueue([song]);
-                          setQueueIndex(0);
-                        } else {
-                          // Otherwise, add to queue
-                          const newQueue = [...queue, song];
-                          setQueue(newQueue);
-                        }
-                      }}
+                      onClick={() => addToQueue(song)}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -825,13 +815,12 @@ const App = ({ token, user }) => {
                             if (song.url) {
                               const isCurrentSong = currentSong?.id === song.id;
                               
-                              // If no song is playing, start playing this one
-                              if (!currentSong) {
-                                setCurrentSong(song);
-                                setQueue([song]);
-                                setQueueIndex(0);
-                                // Sync playback for room
-                                if (isHost && room) {
+                              if (!isCurrentSong) {
+                                // Add to queue (uses safe queue function)
+                                addToQueue(song);
+                                
+                                // Sync playback for room only if starting a new song
+                                if (isHost && room && !currentSong) {
                                   socketRef.current.emit('sync-playback', {
                                     roomCode: room.code,
                                     song: song,
@@ -839,13 +828,8 @@ const App = ({ token, user }) => {
                                     isPlaying: true
                                   });
                                 }
-                              } else if (!isCurrentSong) {
-                                // If clicking on a different song while one is playing, add to queue
-                                const newQueue = [...queue, song];
-                                setQueue(newQueue);
-                                // Don't emit sync-playback, just queue it silently
                               }
-                              // If clicking the current song, just toggle play/pause
+                              // If clicking the current song, do nothing (no reset)
                             }
                           }}
                           style={{ opacity: song.url ? 1 : 0.5, pointerEvents: song.url ? 'auto' : 'none' }}
@@ -879,20 +863,7 @@ const App = ({ token, user }) => {
                     <div
                       key={song.id}
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => {
-                        if (song.url) {
-                          // If no song is playing, start playing this one
-                          if (!currentSong) {
-                            setCurrentSong(song);
-                            setQueue([song]);
-                            setQueueIndex(0);
-                          } else {
-                            // Otherwise, add to queue
-                            const newQueue = [...queue, song];
-                            setQueue(newQueue);
-                          }
-                        }
-                      }}
+                      onClick={() => song.url && addToQueue(song)}
                       style={{ opacity: song.url ? 1 : 0.5, pointerEvents: song.url ? 'auto' : 'none' }}
                     >
                       <div className="song-info">
