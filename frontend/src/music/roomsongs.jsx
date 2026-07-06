@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRoomPlayback, formatTime } from './useRoomPlaybackFunctions';
+import { useAuth } from '../hooks/useAuth';
 import './roomsongs.css';
 import PlaylistPanel from '../components/PlaylistPanel';
 import { useQueue } from '../contexts/QueueContext';
@@ -55,6 +56,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
   } = useRoomPlayback(roomCode, onLeaveRoom, userId);
 
   const { fetchQueue } = useQueue();
+  const { token } = useAuth();
 
   // Device UI state: search, album pagination, song pagination, and expanded album
   const [deviceSearch, setDeviceSearch] = React.useState('');
@@ -305,7 +307,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
               let q = Array.isArray(queue) ? queue : [];
               if ((!q || q.length === 0) && fetchQueue) {
                 try {
-                  q = await fetchQueue(roomCode, null).catch(() => []);
+                  q = await fetchQueue(roomCode, token).catch(() => []);
                 } catch (e) { q = []; }
               }
               if (!q || q.length === 0) {
