@@ -23,7 +23,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/add`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/add`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -63,7 +63,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/${itemId}`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/${itemId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/reorder`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue/reorder`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -130,7 +130,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
@@ -162,7 +162,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/queue`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',

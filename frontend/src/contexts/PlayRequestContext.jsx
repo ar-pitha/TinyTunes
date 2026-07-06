@@ -23,7 +23,7 @@ export const PlayRequestProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/play-requests`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/play-requests`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ export const PlayRequestProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        let url = `${API_BASE}/api/room/${roomCode}/play-requests`;
+        let url = `${API_BASE}/api/rooms/${roomCode}/play-requests`;
         if (status) {
           url += `?status=${status}`;
         }
@@ -107,7 +107,7 @@ export const PlayRequestProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/play-requests/${requestId}/approve`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/play-requests/${requestId}/approve`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ export const PlayRequestProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/play-requests/${requestId}/reject`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/play-requests/${requestId}/reject`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ export const PlayRequestProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/play-requests?status=Pending`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/play-requests?status=Pending`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`

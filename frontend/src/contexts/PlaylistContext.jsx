@@ -24,7 +24,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/add`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/playlist/add`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/${itemId}`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/playlist/${itemId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/reorder`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/playlist/reorder`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -131,7 +131,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/playlist`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
@@ -163,7 +163,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playlist/search?query=${encodeURIComponent(query)}`, {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/playlist/search?query=${encodeURIComponent(query)}`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
