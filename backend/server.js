@@ -101,6 +101,9 @@ const io = new Server(server, {
 
 app.use(express.json());
 
+// Make Socket.IO instance available to routers via app.get('io')
+app.set('io', io);
+
 // MongoDB connection and GridFS setup
 const mongoURI =
   process.env.MONGODB_URI ||

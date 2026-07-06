@@ -365,6 +365,16 @@ router.post('/:code/queue/add', authenticateToken, async (req, res) => {
     room.updatedAt = new Date();
     await room.save();
 
+    // Emit queue update to all sockets in the room (if Socket.IO instance is available)
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(normalizedCode).emit('queueUpdated', { roomCode: normalizedCode, queue: room.queue });
+      }
+    } catch (e) {
+      console.error('Failed to emit queueUpdated:', e.message);
+    }
+
     res.status(201).json({ message: 'Song added to queue', queueItem: newQueueItem });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1050,6 +1060,16 @@ router.put('/:code/play-requests/:requestId/approve', authenticateToken, async (
 
     room.updatedAt = new Date();
     await room.save();
+
+    // Emit playlist update to all sockets in the room
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(normalizedCode).emit('playlistUpdated', { roomCode: normalizedCode, playlist: room.playlist, playlistItem });
+      }
+    } catch (e) {
+      console.error('Failed to emit playlistUpdated:', e.message);
+    }
 
     res.json({ message: 'Request approved and added to playlist', playlistItem });
   } catch (error) {

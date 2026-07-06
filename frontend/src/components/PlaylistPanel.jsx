@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueue } from '../contexts/QueueContext';
 import { usePlaylist } from '../contexts/PlaylistContext';
 import { useAuth } from '../hooks/useAuth';
 import './panels.css';
@@ -9,6 +10,7 @@ import './panels.css';
 export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
   const { playlist, searchResults, fetchPlaylist, searchPlaylist, removeFromPlaylist, loading, error } = usePlaylist();
   const { token } = useAuth();
+  const { addToQueue, fetchQueue } = useQueue();
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -34,6 +36,18 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
       };
     }
   }, [socket, roomCode, token]);
+
+  // Listen for queue updates to optionally reflect related UI changes
+  useEffect(() => {
+    if (socket) {
+      socket.on('queueUpdated', (data) => {
+        // Optionally refresh queue elsewhere; playlist doesn't need to auto-refresh
+        console.log('Queue updated:', data);
+      });
+
+      return () => socket.off('queueUpdated');
+    }
+  }, [socket]);
 
   const handleSearch = async (query) => {
     setSearchQuery(query);
@@ -67,9 +81,56 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
 
   return (
     <div className="playlist-panel">
-      <div className="panel-header" onClick={() => setExpanded(!expanded)}>
-        <h3>Playlist ({playlist.length})</h3>
-        <span className="expand-icon">{expanded ? '▼' : '▶'}</span>
+      <div className="panel-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setExpanded(!expanded)}>
+            <h3>Playlist ({playlist.length})</h3>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="refresh-btn"
+              title="Refresh playlist"
+              onClick={() => fetchPlaylist(roomCode, token).catch(err => console.error(err))}
+            >
+              ⟳
+            </button>
+            {isHost && (
+              <button
+                className="play-queue-btn"
+                title="Play queue"
+                onClick={async () => {
+                  try {
+                    const q = await fetchQueue(roomCode, token);
+                    if (!q || q.length === 0) return alert('Queue is empty');
+                    const first = q[0];
+                    const playback = {
+                      currentSongId: first.songId || first._id || first.id,
+                      currentSong: {
+                        title: first.title,
+                        artist: first.artist,
+                        album: first.album || '',
+                        duration: first.duration || 0,
+                        source: first.source || 'Queue',
+                      },
+                      currentTime: 0,
+                      isPlaying: true,
+                      queue: q,
+                      serverTime: Date.now(),
+                    };
+
+                    socket?.emit('hostPlayback', { roomCode, playback });
+                  } catch (e) {
+                    console.error('Play queue failed', e);
+                    alert('Failed to play queue');
+                  }
+                }}
+              >
+                ▶ Play Queue
+              </button>
+            )}
+            <span className="expand-icon" onClick={() => setExpanded(!expanded)}>{expanded ? '▼' : '▶'}</span>
+          </div>
+        </div>
       </div>
 
       {expanded && (
@@ -111,15 +172,42 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
                     <p className="item-title">{item.title}</p>
                     <p className="item-artist">{item.artist}</p>
                   </div>
-                  {isHost && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button
-                      className="remove-btn"
-                      onClick={() => handleRemoveFromPlaylist(item._id)}
-                      title="Remove from playlist"
+                      className="add-queue-btn"
+                      title="Add to queue"
+                      onClick={async () => {
+                        try {
+                          const songForQueue = {
+                            id: item.songId || item._id || item.id,
+                            title: item.title,
+                            artist: item.artist,
+                            album: item.album || '',
+                            duration: item.duration || 0,
+                            source: 'Playlist'
+                          };
+                          const added = await addToQueue(songForQueue, roomCode, token);
+                          // Refresh queue elsewhere; emit handled by server
+                          socket?.emit('queueItemAdded', { roomCode, queueItem: added });
+                        } catch (err) {
+                          console.error('Failed to add to queue:', err);
+                          alert('Failed to add to queue');
+                        }
+                      }}
                     >
-                      ✕
+                      ➕ Queue
                     </button>
-                  )}
+
+                    {isHost && (
+                      <button
+                        className="remove-btn"
+                        onClick={() => handleRemoveFromPlaylist(item._id)}
+                        title="Remove from playlist"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
