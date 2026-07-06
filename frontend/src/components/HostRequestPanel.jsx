@@ -35,8 +35,13 @@ export const HostRequestPanel = ({ roomCode, socket, isHost }) => {
 
   const handleApprove = async (requestId, request) => {
     try {
-      await approvePlayRequest(requestId, roomCode, token);
-      socket?.emit('playRequestApproved', { roomCode, requestId, userId: request.requestedBy });
+      const res = await approvePlayRequest(requestId, roomCode, token);
+      // If backend returned a playlistItem, notify other clients to refresh playlist
+      if (res && res.playlistItem) {
+        socket?.emit('playlistUpdated', { roomCode, item: res.playlistItem });
+      } else {
+        socket?.emit('playRequestApproved', { roomCode, requestId, userId: request.requestedBy });
+      }
     } catch (err) {
       console.error('Failed to approve request:', err);
     }

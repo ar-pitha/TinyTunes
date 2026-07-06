@@ -1027,8 +1027,8 @@ router.put('/:code/play-requests/:requestId/approve', authenticateToken, async (
       return res.status(404).json({ error: 'Request not found' });
     }
 
-    // Add to queue
-    const queueItem = {
+    // Add approved request to the playlist (not the ephemeral queue)
+    const playlistItem = {
       _id: new mongoose.Types.ObjectId(),
       songId: request.songId,
       title: request.songTitle,
@@ -1038,10 +1038,10 @@ router.put('/:code/play-requests/:requestId/approve', authenticateToken, async (
       source: request.source,
       addedBy: request.requestedBy,
       addedAt: new Date(),
-      order: room.queue.length
+      order: room.playlist.length
     };
 
-    room.queue.push(queueItem);
+    room.playlist.push(playlistItem);
 
     // Update request status
     request.status = 'Accepted';
@@ -1051,7 +1051,7 @@ router.put('/:code/play-requests/:requestId/approve', authenticateToken, async (
     room.updatedAt = new Date();
     await room.save();
 
-    res.json({ message: 'Request approved and added to queue', queueItem });
+    res.json({ message: 'Request approved and added to playlist', playlistItem });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
