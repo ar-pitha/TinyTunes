@@ -63,10 +63,21 @@ export const HostRequestPanel = ({ roomCode, socket, isHost }) => {
 
   return (
     <div className="host-request-panel">
-      <div className="panel-header" onClick={() => setExpanded(!expanded)}>
-        <h3>Play Requests ({pendingRequests.length})</h3>
-        {pendingRequests.length > 0 && <span className="badge">{pendingRequests.length}</span>}
-        <span className="expand-icon">{expanded ? '▼' : '▶'}</span>
+      <div className="panel-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setExpanded(!expanded)}>
+          <h3>Play Requests ({pendingRequests.length})</h3>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="refresh-btn"
+            title="Refresh requests"
+            onClick={() => getPendingRequests(roomCode, token).catch(err => console.error(err))}
+          >
+            ⟳
+          </button>
+          {pendingRequests.length > 0 && <span className="badge">{pendingRequests.length}</span>}
+          <span className="expand-icon" onClick={() => setExpanded(!expanded)}>{expanded ? '▼' : '▶'}</span>
+        </div>
       </div>
 
       {expanded && (

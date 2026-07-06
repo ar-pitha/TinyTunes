@@ -10,7 +10,7 @@ import './panels.css';
 export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
   const { playlist, searchResults, fetchPlaylist, searchPlaylist, removeFromPlaylist, loading, error } = usePlaylist();
   const { token } = useAuth();
-  const { addToQueue, fetchQueue } = useQueue();
+  const { addToQueue, fetchQueue, queue: localQueue } = useQueue();
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -95,14 +95,26 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
               ⟳
             </button>
             {isHost && (
-              <button
-                className="play-queue-btn"
-                title="Play queue"
-                onClick={async () => {
-                  try {
-                    const q = await fetchQueue(roomCode, token);
-                    if (!q || q.length === 0) return alert('Queue is empty');
-                    const first = q[0];
+                    <button
+                      className="play-queue-btn"
+                      title="Play queue"
+                      onClick={async () => {
+                        try {
+                          let q = [];
+                          try {
+                            q = await fetchQueue(roomCode, token) || [];
+                          } catch (e) {
+                            console.warn('fetchQueue failed, falling back to local queue', e);
+                            q = [];
+                          }
+
+                          // Fallback to local queue state if server returned empty but client has items
+                          if ((!q || q.length === 0) && Array.isArray(localQueue) && localQueue.length > 0) {
+                            q = localQueue;
+                          }
+
+                          if (!q || q.length === 0) return alert('Queue is empty');
+                          const first = q[0];
                     const playback = {
                       currentSongId: first.songId || first._id || first.id,
                       currentSong: {
