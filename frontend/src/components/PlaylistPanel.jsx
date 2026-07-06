@@ -11,6 +11,7 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
   const { playlist, searchResults, fetchPlaylist, searchPlaylist, removeFromPlaylist, loading, error } = usePlaylist();
   const { token } = useAuth();
   const { addToQueue, fetchQueue, queue: localQueue } = useQueue();
+  const API_BASE = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -114,53 +115,69 @@ export const PlaylistPanel = ({ roomCode, socket, isHost }) => {
                           }
 
                           if (!q || q.length === 0) return alert('Queue is empty');
-                          const first = q[0];
-                    const playback = {
-                      currentSongId: first.songId || first._id || first.id,
-                      currentSong: {
-                        title: first.title,
-                        artist: first.artist,
-                        album: first.album || '',
-                        duration: first.duration || 0,
-                        source: first.source || 'Queue',
-                      },
-                      currentTime: 0,
-                      isPlaying: true,
-                      queue: q,
-                      serverTime: Date.now(),
-                    };
+                          {isHost && (
+                            <button
+                              className="play-queue-btn"
+                              title="Play queue"
+                              onClick={async () => {
+                                if (typeof onPlayQueue === 'function') {
+                                  onPlayQueue();
+                                  return;
+                                }
+                                // Fallback behavior if parent didn't provide handler
+                                try {
+                                  let q = [];
+                                  try {
+                                    q = await fetchQueue(roomCode, token) || [];
+                                  } catch (e) {
+                                    console.warn('fetchQueue failed, falling back to local queue', e);
+                                    q = [];
+                                  }
 
-                    socket?.emit('hostPlayback', { roomCode, playback });
-                  } catch (e) {
-                    console.error('Play queue failed', e);
-                    alert('Failed to play queue');
-                  }
-                }}
-              >
-                ▶ Play Queue
-              </button>
-            )}
-            <span className="expand-icon" onClick={() => setExpanded(!expanded)}>{expanded ? '▼' : '▶'}</span>
-          </div>
-        </div>
-      </div>
+                                  if ((!q || q.length === 0) && Array.isArray(localQueue) && localQueue.length > 0) {
+                                    q = localQueue;
+                                  }
 
-      {expanded && (
-        <div className="panel-content">
-          <div className="search-container">
-            <input
-              type="text"
-              placeholder="Search playlist..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="search-input"
-            />
-            {searchQuery && (
-              <button
-                className="clear-search-btn"
-                onClick={() => {
-                  setSearchQuery('');
-                  setIsSearching(false);
+                                  if (!q || q.length === 0) return alert('Queue is empty');
+                                  const first = q[0];
+                                  const playback = {
+                                    currentSongId: first.songId || first._id || first.id,
+                                    currentSong: {
+                                      title: first.title,
+                                      artist: first.artist,
+                                      album: first.album || '',
+                                      duration: first.duration || 0,
+                                      source: first.source || 'Queue',
+                                    },
+                                    currentTime: 0,
+                                    isPlaying: true,
+                                    queue: q,
+                                    serverTime: Date.now(),
+                                  };
+
+                                  socket?.emit('hostPlayback', { roomCode, playback });
+                                  // Persist playback to server so late-joiners can recover
+                                  try {
+                                    fetch(`${API_BASE}/api/rooms/${roomCode}/playback`, {
+                                      method: 'PUT',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                      },
+                                      body: JSON.stringify(playback),
+                                    }).catch(e => console.warn('persist playback failed', e));
+                                  } catch (e) {
+                                    console.warn('persist playback error', e);
+                                  }
+                                } catch (e) {
+                                  console.error('Play queue failed', e);
+                                  alert('Failed to play queue');
+                                }
+                              }}
+                            >
+                              ▶ Play Queue
+                            </button>
+                          )}
                 }}
               >
                 ✕

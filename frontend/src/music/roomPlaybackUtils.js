@@ -5,6 +5,8 @@ export const makeDeviceSongId = (file) => `device-${file.name}-${file.size}-${fi
 
 export const resolveSongUrl = (song) => {
   if (!song) return null;
+  // Prefer an explicit songId (e.g., queue items store underlying songId)
+  if (song.songId) return `${API_SONGS}/${song.songId}/stream`;
   if (song._id) return `${API_SONGS}/${song._id}/stream`;
   if (song.source === 'device' && song.url) return song.url;
   if (song.contentUri) return Capacitor.convertFileSrc(song.contentUri);

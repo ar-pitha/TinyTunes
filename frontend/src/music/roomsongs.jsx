@@ -2,6 +2,7 @@ import React from 'react';
 import { useRoomPlayback, formatTime } from './useRoomPlaybackFunctions';
 import './roomsongs.css';
 import PlaylistPanel from '../components/PlaylistPanel';
+import { useQueue } from '../contexts/QueueContext';
 import QueuePanel from '../components/QueuePanel';
 import HostRequestPanel from '../components/HostRequestPanel';
 
@@ -52,6 +53,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     updateRoomName,
     leaveRoom,
   } = useRoomPlayback(roomCode, onLeaveRoom, userId);
+
+  const { fetchQueue } = useQueue();
 
   // Device UI state: search, album pagination, song pagination, and expanded album
   const [deviceSearch, setDeviceSearch] = React.useState('');
@@ -296,7 +299,47 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
           <QueuePanel roomCode={roomCode} socket={socket} />
         </div>
         <div style={{ flex: 1 }}>
-          <PlaylistPanel roomCode={roomCode} socket={socket} isHost={isHost} />
+          <PlaylistPanel roomCode={roomCode} socket={socket} isHost={isHost} onPlayQueue={async () => {
+            // Prefer local queue state; if empty, try fetching from server
+            try {
+              let q = Array.isArray(queue) ? queue : [];
+              if ((!q || q.length === 0) && fetchQueue) {
+                try {
+                  q = await fetchQueue(roomCode, null).catch(() => []);
+                } catch (e) { q = []; }
+              }
+              if (!q || q.length === 0) {
+                return alert('Queue is empty');
+              }
+              const first = q[0];
+              // Use playNow to set currentSong locally and emit playback
+              if (isHost && playNow) {
+                // Normalize object: playNow expects song object with _id or id
+                await playNow(first);
+              } else {
+                // Fallback: emit hostPlayback so server broadcasts
+                const playback = {
+                  currentSongId: first.songId || first._id || first.id,
+                  currentSong: {
+                    _id: first.songId || first._id || first.id,
+                    title: first.title,
+                    artist: first.artist,
+                    album: first.album || '',
+                    duration: first.duration || 0,
+                    source: first.source || 'Queue',
+                  },
+                  currentTime: 0,
+                  isPlaying: true,
+                  queue: q,
+                  serverTime: Date.now(),
+                };
+                socket?.emit('hostPlayback', { roomCode, playback });
+              }
+            } catch (e) {
+              console.error('onPlayQueue error', e);
+              alert('Failed to play queue');
+            }
+          }} />
         </div>
         <div style={{ width: 360 }}>
           <HostRequestPanel roomCode={roomCode} socket={socket} isHost={isHost} />

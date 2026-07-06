@@ -1692,13 +1692,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     setCurrentSong(songToPlay);
     setIsPlaying(true);
     if (audioRef.current) {
-      if (isDevice) {
-        const localUrl = resolveSongUrl(songToPlay);
-        if (localUrl) applyAudioSrc(localUrl, true);
-      } else {
-        const audioUrl = `${API_SONGS}/${songToPlay._id}/stream`;
-        if (audioUrl) applyAudioSrc(audioUrl, true);
-      }
+      const src = resolveSongUrl(songToPlay);
+      if (src) applyAudioSrc(src, true);
     }
 
     const payload = buildPlaybackPayload({ currentSong: songToPlay, currentTime: 0, isPlaying: true, queue: [] });
