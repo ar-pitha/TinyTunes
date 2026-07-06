@@ -15,7 +15,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
     // playback
     queue, currentSong, currentTime, currentDuration, bufferedEnd, isPlaying,
-    audioRef,
+    audioRef, socket,
 
     // guest-only
     guestPaused, playbackEnabled, guestVolume, playbackError,
@@ -293,13 +293,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       {/* Panels: Queue, Playlist, Requests */}
       <div className="panels-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <QueuePanel roomCode={roomCode} socket={socketRef.current} />
+          <QueuePanel roomCode={roomCode} socket={socket} />
         </div>
         <div style={{ flex: 1 }}>
-          <PlaylistPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
+          <PlaylistPanel roomCode={roomCode} socket={socket} isHost={isHost} />
         </div>
         <div style={{ width: 360 }}>
-          <HostRequestPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
+          <HostRequestPanel roomCode={roomCode} socket={socket} isHost={isHost} />
         </div>
       </div>
 

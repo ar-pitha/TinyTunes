@@ -1901,6 +1901,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     // playback
     queue, currentSong, currentTime, currentDuration, bufferedEnd, isPlaying,
     audioRef,
+    // expose socket instance for panels/components
+    socket: socketRef.current,
 
     // guest-only
     guestPaused, playbackEnabled, guestVolume, playbackError,
