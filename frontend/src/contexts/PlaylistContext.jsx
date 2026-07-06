@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 /**
  * PlaylistContext - Manages the permanent room playlist
  * Provides playlist state and operations for adding, removing, reordering, and searching songs
@@ -22,7 +24,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playlist/add`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/add`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -62,7 +64,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playlist/${itemId}`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/${itemId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -95,7 +97,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playlist/reorder`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist/reorder`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -129,7 +131,7 @@ export const PlaylistProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playlist`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playlist`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`

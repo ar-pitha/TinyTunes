@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 /**
  * PlaybackContext - Manages playback state and control
  * Provides centralized state for current song, playback status, and priority logic
@@ -26,7 +28,7 @@ export const PlaybackProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playback/play`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playback/play`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -72,7 +74,7 @@ export const PlaybackProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playback/pause`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playback/pause`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -105,7 +107,7 @@ export const PlaybackProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playback/resume`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playback/resume`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -138,7 +140,7 @@ export const PlaybackProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playback/seek`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playback/seek`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -173,7 +175,7 @@ export const PlaybackProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/playback/next`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/playback/next`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

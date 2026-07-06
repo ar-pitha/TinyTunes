@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 /**
  * QueueContext - Manages the temporary queue system
  * Provides queue state and operations for adding, removing, and reordering songs
@@ -21,7 +23,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/queue/add`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/add`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -61,7 +63,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/queue/${itemId}`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/${itemId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -94,7 +96,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/queue/reorder`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue/reorder`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -128,7 +130,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/queue`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
@@ -160,7 +162,7 @@ export const QueueProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/room/${roomCode}/queue`, {
+        const response = await fetch(`${API_BASE}/api/room/${roomCode}/queue`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
