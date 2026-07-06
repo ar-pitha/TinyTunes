@@ -286,18 +286,20 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
               : ''
           }
         >
-          {isHost
-        {/* Panels: Queue, Playlist, Requests */}
-        <div className="panels-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
-            <QueuePanel roomCode={roomCode} socket={socketRef.current} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <PlaylistPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
-          </div>
-          <div style={{ width: 360 }}>
-            <HostRequestPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
-          </div>
+          {isHost ? (isPlaying ? 'Pause' : 'Play') : (guestPaused ? 'Join Live' : 'Listen')}
+        </button>
+      </div>
+
+      {/* Panels: Queue, Playlist, Requests */}
+      <div className="panels-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <QueuePanel roomCode={roomCode} socket={socketRef.current} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <PlaylistPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
+        </div>
+        <div style={{ width: 360 }}>
+          <HostRequestPanel roomCode={roomCode} socket={socketRef.current} isHost={isHost} />
         </div>
       </div>
 
