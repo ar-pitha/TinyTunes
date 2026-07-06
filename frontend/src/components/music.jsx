@@ -95,6 +95,14 @@ const App = ({ token, user }) => {
     };
   }, [currentSong]);
 
+  // Initialize queue when current song changes
+  useEffect(() => {
+    if (currentSong && queue.length === 0) {
+      setQueue([currentSong]);
+      setQueueIndex(0);
+    }
+  }, [currentSong?.id]);
+
   // Fetch songs from backend (use cache for instant UI)
   const fetchSongs = async () => {
     if (!token) return;
@@ -234,14 +242,34 @@ const App = ({ token, user }) => {
     formData.append('album', uploadFields.album);
     formData.append('duration', uploadFields.duration || 0);
     try {
-      await fetch(`${BACKEND_URL}/api/songs/upload`, {
+      const res = await fetch(`${BACKEND_URL}/api/songs/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
+      
+      if (res.ok) {
+        const uploadedSong = await res.json();
+        
+        // Create song object with proper URL
+        const newSong = {
+          id: uploadedSong._id,
+          title: uploadedSong.title,
+          artist: uploadedSong.artist,
+          album: uploadedSong.album,
+          duration: uploadedSong.duration,
+          url: `${BACKEND_URL}/api/songs/${uploadedSong._id}/stream`
+        };
+        
+        // Add to queue without interrupting current playback
+        addToQueue(newSong);
+      }
+      
       setUploadModalOpen(false);
       setUploadFile(null);
       setUploadFields({ title: '', artist: '', album: '', duration: '' });
+      
+      // Refresh playlist in background
       fetchSongs();
     } catch (err) {
       console.error("Upload failed", err);
@@ -269,25 +297,24 @@ const App = ({ token, user }) => {
   // Playback controls
   // Helper function to safely add song to queue while preserving playback
   const addToQueue = (song) => {
-    if (!song) return;
-    
-    // If no current song, start playing this one
-    if (!currentSong) {
+    if (!song || !currentSong) {
+      // If no current song, just set it directly
       setCurrentSong(song);
       setQueue([song]);
       setQueueIndex(0);
       return;
     }
     
-    // If current song is already in queue, just append the new song
-    if (queue.length > 0) {
-      setQueue([...queue, song]);
-      return;
-    }
-    
-    // If queue is empty but we have a current song, rebuild queue with current song first
-    const newQueue = [currentSong, song];
-    setQueue(newQueue);
+    // Use functional setState to avoid stale closure issues
+    setQueue(prevQueue => {
+      // Make sure current song is always the first in queue
+      if (prevQueue.length === 0) {
+        return [currentSong, song];
+      }
+      
+      // Append new song to existing queue
+      return [...prevQueue, song];
+    });
   };
 
   const togglePlay = () => {
@@ -515,30 +542,11 @@ const App = ({ token, user }) => {
     setDeviceSongs(songs);
   };
 
-  // Persist deviceSongs metadata in localStorage (no file/url)
-  useEffect(() => {
-    if (deviceSongs.length > 0) {
-      localStorage.setItem('deviceSongs', JSON.stringify(deviceSongs.map(song => ({
-        id: song.id,
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        duration: song.duration
-      }))));
-    }
-  }, [deviceSongs]);
-
   // Restore deviceSongs metadata on mount (no file/url)
+  // Note: Device songs with blob URLs can't be persisted across sessions
   useEffect(() => {
-    const storedDeviceSongs = localStorage.getItem('deviceSongs');
-    if (storedDeviceSongs) {
-      try {
-        const songs = JSON.parse(storedDeviceSongs);
-        setDeviceSongs(songs);
-      } catch (err) {
-        setDeviceSongs([]);
-      }
-    }
+    // Device songs are loaded fresh each time via the file picker
+    // No need to restore from localStorage
   }, []);
 
   return (
