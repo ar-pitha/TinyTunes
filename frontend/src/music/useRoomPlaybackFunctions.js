@@ -1352,6 +1352,73 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     }
   };
 
+  // Host adds a song to the playlist
+  const addSongToPlaylist = async (song) => {
+    if (!isHost) return;
+    try {
+      const payload = {
+        songId: song._id || song.id,
+        title: song.title,
+        artist: song.artist || '',
+        album: song.album || '',
+        duration: song.duration || 0,
+        source: song.source || 'Uploaded'
+      };
+      const res = await fetch(`${API_ROOMS}/${roomCode}/playlist/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to add to playlist: ${res.status}`);
+      }
+      // Let other clients know
+      try { socketRef.current?.emit('playlistUpdated', { roomCode }); } catch (e) {}
+      return await res.json();
+    } catch (err) {
+      console.error('addSongToPlaylist error:', err);
+      setError(err.message || 'Failed to add to playlist');
+      throw err;
+    }
+  };
+
+  // Guest suggests a song to be added to playlist by creating a play request with a note
+  const suggestSongToPlaylist = async (song) => {
+    try {
+      const payload = {
+        songId: song._id || song.id,
+        title: song.title,
+        artist: song.artist || '',
+        album: song.album || '',
+        duration: song.duration || 0,
+        source: song.source || 'Uploaded',
+        notes: 'Suggest add to playlist'
+      };
+      const res = await fetch(`${API_ROOMS}/${roomCode}/play-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to suggest playlist: ${res.status}`);
+      }
+      try { socketRef.current?.emit('playlistSuggestionCreated', { roomCode, request: payload }); } catch (e) {}
+      return await res.json();
+    } catch (err) {
+      console.error('suggestSongToPlaylist error:', err);
+      setError(err.message || 'Failed to suggest playlist');
+      throw err;
+    }
+  };
+
   // Host toggles play/pause
   const togglePlayPause = (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -1847,6 +1914,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     // actions
     addSongToQueue,
+    addSongToPlaylist,
+    suggestSongToPlaylist,
     togglePlayPause,
     guestTogglePlayPause,
     enableGuestPlayback,

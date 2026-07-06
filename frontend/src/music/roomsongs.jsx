@@ -26,6 +26,8 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
 
     // actions
     addSongToQueue,
+    addSongToPlaylist,
+    suggestSongToPlaylist,
     togglePlayPause,
     guestTogglePlayPause,
     enableGuestPlayback,
@@ -133,6 +135,9 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                       <>
                         <button onClick={() => playNow(s)}>Play Now</button>
                         <button onClick={() => addSongToQueue(s)}>Add to Queue</button>
+                        <button onClick={() => addSongToPlaylist(s)} style={{ marginLeft: 8 }}>
+                          Add to Playlist
+                        </button>
                         <button
                           onClick={() => deleteUploadedSong(s._id)}
                           style={{ marginLeft: 8, backgroundColor: '#ef4444', color: '#fff' }}
@@ -148,7 +153,12 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                         )}
                       </>
                     ) : (
-                      <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
+                      <>
+                        <button onClick={() => alert('Only host can add or play songs')} disabled>Host only</button>
+                        <button onClick={() => suggestSongToPlaylist(s)} style={{ marginLeft: 8 }}>
+                          Suggest to Playlist
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -560,9 +570,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                                         <>
                                           <button onClick={() => playNow(s)} disabled={!!uploadStatus}>Play Now</button>
                                           <button onClick={() => addSongToQueue(s)} disabled={!!uploadStatus}>Add to Queue</button>
+                                          <button onClick={() => addSongToPlaylist(s)} disabled={!!uploadStatus} style={{ marginLeft: 8 }}>Add to Playlist</button>
                                         </>
                                       ) : (
-                                        <button disabled>Host only</button>
+                                        <>
+                                          <button disabled>Host only</button>
+                                          <button onClick={() => suggestSongToPlaylist(s)} style={{ marginLeft: 8 }}>Suggest to Playlist</button>
+                                        </>
                                       )}
                                     </td>
                                   </tr>
@@ -619,9 +633,13 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                                                   <>
                                                     <button onClick={() => playNow(s)} disabled={!!uploadStatus}>Play Now</button>
                                                     <button onClick={() => addSongToQueue(s)} disabled={!!uploadStatus}>Add to Queue</button>
+                                                    <button onClick={() => addSongToPlaylist(s)} disabled={!!uploadStatus} style={{ marginLeft: 8 }}>Add to Playlist</button>
                                                   </>
                                                 ) : (
-                                                  <button disabled>Host only</button>
+                                                  <>
+                                                    <button disabled>Host only</button>
+                                                    <button onClick={() => suggestSongToPlaylist(s)} style={{ marginLeft: 8 }}>Suggest to Playlist</button>
+                                                  </>
                                                 )}
                                               </td>
                                             </tr>
