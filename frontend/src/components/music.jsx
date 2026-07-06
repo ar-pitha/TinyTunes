@@ -35,6 +35,8 @@ const App = ({ token, user }) => {
   const [deviceSongs, setDeviceSongs] = useState([]);
   const [deviceAccessError, setDeviceAccessError] = useState('');
   const [deviceFileInputRef] = useState(() => React.createRef());
+  const [queue, setQueue] = useState([]);
+  const [queueIndex, setQueueIndex] = useState(0);
 
   const audioRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -289,6 +291,27 @@ const App = ({ token, user }) => {
   };
 
   const handleNext = () => {
+    // Check if there's a queued song first
+    if (queue.length > 0 && queueIndex < queue.length - 1) {
+      const nextQueueIndex = queueIndex + 1;
+      const nextSong = queue[nextQueueIndex];
+      setCurrentSong(nextSong);
+      setQueueIndex(nextQueueIndex);
+      setRecentlyPlayed(prev => [nextSong, ...prev.slice(0, 9)]);
+      
+      // Sync with room if host
+      if (isHost && room) {
+        socketRef.current.emit('sync-playback', {
+          roomCode: room.code,
+          song: nextSong,
+          currentTime: 0,
+          isPlaying: true
+        });
+      }
+      return;
+    }
+    
+    // Fall back to playlist navigation
     if (!playlist.length) return;
     
     const currentIndex = playlist.findIndex(song => song.id === currentSong?.id);
@@ -316,6 +339,26 @@ const App = ({ token, user }) => {
   };
 
   const handlePrevious = () => {
+    // Check if there's a queued song first
+    if (queue.length > 0 && queueIndex > 0) {
+      const prevQueueIndex = queueIndex - 1;
+      const prevSong = queue[prevQueueIndex];
+      setCurrentSong(prevSong);
+      setQueueIndex(prevQueueIndex);
+      
+      // Sync with room if host
+      if (isHost && room) {
+        socketRef.current.emit('sync-playback', {
+          roomCode: room.code,
+          song: prevSong,
+          currentTime: 0,
+          isPlaying: true
+        });
+      }
+      return;
+    }
+    
+    // Fall back to playlist navigation
     if (!playlist.length) return;
     
     const currentIndex = playlist.findIndex(song => song.id === currentSong?.id);
@@ -629,7 +672,18 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => setCurrentSong(song)}
+                      onClick={() => {
+                        // If no song is playing, start playing this one
+                        if (!currentSong) {
+                          setCurrentSong(song);
+                          setQueue([song]);
+                          setQueueIndex(0);
+                        } else {
+                          // Otherwise, add to queue
+                          const newQueue = [...queue, song];
+                          setQueue(newQueue);
+                        }
+                      }}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -667,7 +721,18 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => setCurrentSong(song)}
+                      onClick={() => {
+                        // If no song is playing, start playing this one
+                        if (!currentSong) {
+                          setCurrentSong(song);
+                          setQueue([song]);
+                          setQueueIndex(0);
+                        } else {
+                          // Otherwise, add to queue
+                          const newQueue = [...queue, song];
+                          setQueue(newQueue);
+                        }
+                      }}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -694,7 +759,18 @@ const App = ({ token, user }) => {
                     <div 
                       key={song.id} 
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => setCurrentSong(song)}
+                      onClick={() => {
+                        // If no song is playing, start playing this one
+                        if (!currentSong) {
+                          setCurrentSong(song);
+                          setQueue([song]);
+                          setQueueIndex(0);
+                        } else {
+                          // Otherwise, add to queue
+                          const newQueue = [...queue, song];
+                          setQueue(newQueue);
+                        }
+                      }}
                     >
                       <div className="song-info">
                         <h3>{song.title}</h3>
@@ -790,7 +866,20 @@ const App = ({ token, user }) => {
                     <div
                       key={song.id}
                       className={`song-item ${currentSong?.id === song.id ? 'active' : ''}`}
-                      onClick={() => song.url ? setCurrentSong(song) : null}
+                      onClick={() => {
+                        if (song.url) {
+                          // If no song is playing, start playing this one
+                          if (!currentSong) {
+                            setCurrentSong(song);
+                            setQueue([song]);
+                            setQueueIndex(0);
+                          } else {
+                            // Otherwise, add to queue
+                            const newQueue = [...queue, song];
+                            setQueue(newQueue);
+                          }
+                        }
+                      }}
                       style={{ opacity: song.url ? 1 : 0.5, pointerEvents: song.url ? 'auto' : 'none' }}
                     >
                       <div className="song-info">
