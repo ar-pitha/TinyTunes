@@ -1070,7 +1070,36 @@
   font-style: italic;
 }
 
+/* Responsive Panels Row */
+.panels-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1200px) {
+  .panels-row {
+    flex-direction: column;
+  }
+
+  .panels-row > div {
+    width: 100% !important;
+    flex: 1 !important;
+  }
+}
+
 @media (max-width: 768px) {
+  .panels-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .panels-row > div {
+    width: 100% !important;
+    flex: 1 !important;
+  }
+
   .songs-header {
     flex-direction: column;
     align-items: flex-start;
@@ -1093,5 +1122,17 @@
 
   .load-device-btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .panels-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .panels-row > div {
+    width: 100% !important;
+    flex: 1 !important;
   }
 }

@@ -991,6 +991,20 @@ router.post('/:code/play-requests', authenticateToken, async (req, res) => {
     room.updatedAt = new Date();
     await room.save();
 
+    // Emit play request created event to all sockets in the room (notify host)
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(normalizedCode).emit('newPlayRequest', {
+          roomCode: normalizedCode,
+          request: newRequest,
+          totalRequests: room.playRequests.length
+        });
+      }
+    } catch (e) {
+      console.error('Failed to emit newPlayRequest:', e.message);
+    }
+
     res.status(201).json({ message: 'Play request created', request: newRequest });
   } catch (error) {
     res.status(500).json({ error: error.message });

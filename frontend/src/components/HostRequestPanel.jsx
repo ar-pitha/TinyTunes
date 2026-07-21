@@ -17,21 +17,25 @@ export const HostRequestPanel = ({ roomCode, socket, isHost }) => {
     }
   }, [isHost, roomCode, token]);
 
-  // Listen for new play requests from socket
+  // Listen for new play requests from socket (with automatic refresh)
   useEffect(() => {
     if (socket && isHost) {
-      socket.on('newPlayRequest', (data) => {
-        console.log('New play request:', data);
+      const handleNewRequest = () => {
+        console.log('New play request received');
         if (roomCode && token) {
-          getPendingRequests(roomCode, token);
+          getPendingRequests(roomCode, token).catch(err => console.error('Failed to fetch requests:', err));
         }
-      });
+      };
+
+      socket.on('newPlayRequest', handleNewRequest);
+      socket.on('playRequestCreated', handleNewRequest);
 
       return () => {
-        socket.off('newPlayRequest');
+        socket.off('newPlayRequest', handleNewRequest);
+        socket.off('playRequestCreated', handleNewRequest);
       };
     }
-  }, [socket, isHost, roomCode, token]);
+  }, [socket, isHost, roomCode, token, getPendingRequests]);
 
   const handleApprove = async (requestId, request) => {
     try {
