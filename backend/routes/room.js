@@ -131,87 +131,58 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
     const { code } = req.params;
     const normalizedCode = String(code || '').trim().toUpperCase();
     const userId = req.user.id;
-    // Destructure playback details from req.body
-    const { currentSongId, currentSong: currentSongPayload, currentTime, isPlaying, queue, serverTime, syncTimestamp } = req.body;
+    const { currentSong: currentSongPayload, currentTime, isPlaying, queue, serverTime } = req.body;
 
-    // Validate room
     const room = await Room.findOne({ code: normalizedCode });
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    // Optional: Only host can update playback
     if (room.host.toString() !== userId.toString()) {
       return res.status(403).json({ error: 'Only host can update playback' });
     }
 
-    const normalizedSongPayload = currentSongPayload && typeof currentSongPayload === 'object' ? currentSongPayload : null;
-    if (normalizedSongPayload && (normalizedSongPayload._id || normalizedSongPayload.id || normalizedSongPayload.source === 'device')) {
+    // Save current song
+    if (currentSongPayload && typeof currentSongPayload === 'object') {
       room.currentSong = {
-        _id: normalizedSongPayload._id || normalizedSongPayload.id || null,
-        id: normalizedSongPayload.id || normalizedSongPayload._id || null,
-        title: normalizedSongPayload.title || 'Unknown',
-        artist: normalizedSongPayload.artist || '',
-        album: normalizedSongPayload.album || '',
-        duration: normalizedSongPayload.duration || 0,
-        source: normalizedSongPayload.source || (normalizedSongPayload._id ? 'uploaded' : 'device'),
+        _id: currentSongPayload._id || currentSongPayload.id || null,
+        id: currentSongPayload.id || currentSongPayload._id || null,
+        songId: currentSongPayload.songId || currentSongPayload._id || currentSongPayload.id || null,
+        title: currentSongPayload.title || 'Unknown',
+        artist: currentSongPayload.artist || '',
+        album: currentSongPayload.album || '',
+        duration: currentSongPayload.duration || 0,
+        source: currentSongPayload.source || 'uploaded',
       };
-    } else if (currentSongId) {
-      const isValidObjectId = mongoose.Types.ObjectId.isValid(currentSongId);
-      if (isValidObjectId) {
-        try {
-          const songExists = await Song.findById(currentSongId);
-          if (songExists) {
-            room.currentSong = currentSongId;
-          }
-        } catch (e) {
-          console.warn('Song lookup error:', e.message);
-        }
-      } else {
-        room.currentSong = {
-          _id: currentSongId,
-          id: currentSongId,
-          title: 'Unknown',
-          artist: '',
-          source: 'device',
-        };
-      }
     } else {
       room.currentSong = null;
     }
 
     if (typeof currentTime === 'number') room.currentTime = Math.max(0, currentTime);
     if (typeof isPlaying === 'boolean') room.isPlaying = isPlaying;
+
+    // Save queue (array of song objects)
     if (Array.isArray(queue)) {
-      room.queue = queue
-        .filter(Boolean)
-        .map((entry) => {
-          if (typeof entry === 'string') {
-            return entry;
-          }
-          if (typeof entry === 'object') {
-            const id = entry._id || entry.id || null;
-            return {
-              _id: entry._id || entry.id || null,
-              id: entry.id || entry._id || null,
-              title: entry.title || 'Unknown',
-              artist: entry.artist || '',
-              album: entry.album || '',
-              duration: entry.duration || 0,
-              source: entry.source || (id && mongoose.Types.ObjectId.isValid(id) ? 'uploaded' : 'device'),
-            };
-          }
-          return null;
-        })
-        .filter(Boolean);
+      room.queue = queue.filter(Boolean).map((entry) => {
+        if (typeof entry === 'string') return { songId: entry };
+        if (typeof entry === 'object' && entry) {
+          return {
+            songId: entry.songId || entry._id || entry.id || '',
+            title: entry.title || 'Unknown',
+            artist: entry.artist || '',
+            album: entry.album || '',
+            duration: entry.duration || 0,
+            source: entry.source || 'Uploaded',
+          };
+        }
+        return null;
+      }).filter(Boolean);
     }
 
-    // Server-side timestamp for real-time sync (prefer client's serverTime if provided)
     room.syncTimestamp = serverTime || Date.now();
     room.lastSyncAt = new Date();
 
     await room.save();
 
-    // Build response with room data and sync info
-    const response = {
+    res.json({
       _id: room._id,
       code: room.code,
       name: room.name,
@@ -226,10 +197,9 @@ router.put('/:code/playback', authenticateToken, async (req, res) => {
       theme: room.theme,
       syncTimestamp: room.syncTimestamp,
       serverTime: Date.now(),
-    };
-
-    res.json(response);
+    });
   } catch (error) {
+    console.error('Playback persist error:', error);
     res.status(500).json({ error: error.message });
   }
 });

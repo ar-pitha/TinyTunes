@@ -7,8 +7,24 @@ const roomSchema = new mongoose.Schema({
   isPrivate: { type: Boolean, default: false },
   password: { type: String },
   users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  
-  // ============ PLAYBACK STATE ============
+
+  // ============ CURRENT PLAYBACK STATE (for clients) ============
+  currentSong: {
+    _id: { type: String, default: null },
+    id: { type: String, default: null },
+    songId: { type: String, default: null },
+    title: { type: String, default: 'Unknown' },
+    artist: { type: String, default: '' },
+    album: { type: String, default: '' },
+    duration: { type: Number, default: 0 },
+    source: { type: String, default: 'uploaded' }
+  },
+  currentTime: { type: Number, default: 0 },
+  isPlaying: { type: Boolean, default: false },
+  syncTimestamp: { type: Number, default: 0 },
+  lastSyncAt: { type: Date },
+
+  // ============ PLAYBACK STATE (legacy) ============
   playback: {
     currentSongId: { type: String, default: null },
     currentSource: { type: String, enum: ['Queue', 'Playlist'], default: null }, // Where current song came from
