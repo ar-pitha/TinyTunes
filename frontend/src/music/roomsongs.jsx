@@ -293,6 +293,12 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
         >
           {isHost ? (isPlaying ? 'Pause' : 'Play') : (guestPaused ? 'Join Live' : 'Listen')}
         </button>
+        <button onClick={() => seekBy(10)} disabled={!isHost} title="Forward 10s">
+          {isHost ? '10s' : 'Forward (Host only)'} ⏩
+        </button>
+        <button onClick={skipNext} disabled={!isHost} title="Play next song in queue">
+          ⏭️ {isHost ? 'Next' : 'Next (Host only)'}
+        </button>
       </div>
 
       {/* Panels: Queue, Playlist, Requests */}
