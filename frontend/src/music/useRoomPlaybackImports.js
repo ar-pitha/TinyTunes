@@ -9,6 +9,7 @@ import {
   formatTime,
   buildQueuePayload,
   resolveSongObj,
+  queueAdditions,
 } from './roomPlaybackUtils';
 
 export {
@@ -26,4 +27,5 @@ export {
   formatTime,
   buildQueuePayload,
   resolveSongObj,
+  queueAdditions,
 };

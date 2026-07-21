@@ -12,6 +12,7 @@ import {
   smoothSyncAudio,
   buildQueuePayload,
   resolveSongObj,
+  queueAdditions,
   formatTime,
 } from './useRoomPlaybackImports';
 
@@ -84,6 +85,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
   const allSongsRef = useRef(allSongs);
   const isHostRef = useRef(isHost);
+  const currentSongRef = useRef(currentSong);
   const audioRef = useRef(null);
   const audioPendingRef = useRef({ src: null, listener: null });
   const playedStackRef = useRef([]);
@@ -398,6 +400,9 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
   // can read the latest value without stale closures.
   useEffect(() => { guestPausedRef.current = guestPaused; }, [guestPaused]);
 
+  // Keep currentSongRef fresh for socket handlers (they close over mount-time state).
+  useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+
   // Socket: join room and listen for host playback
   useEffect(() => {
     // NOTE: previously this created TWO socket connections in a row (the first
@@ -543,6 +548,43 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
           return mapped;
         });
       }
+    });
+
+    // Backend queue additions (host OR guest tapping "➕ Queue" in a panel) land in
+    // room.queue via REST and fire 'queueUpdated'. Only the host drives playback and
+    // it otherwise ignores server queue state, so without this those songs sit in the
+    // queue container and never play. Merge new items into the host's in-memory
+    // playback queue; the host tick rebroadcasts to guests and handleEnded plays them.
+    socketRef.current.on('queueUpdated', (data) => {
+      if (!isHostRef.current) return; // guests already sync via 'playback' broadcast
+      const serverQueue = Array.isArray(data?.queue) ? data.queue : null;
+      if (!serverQueue || serverQueue.length === 0) return;
+
+      setQueue(prev => {
+        // ponytail: dedup by song id — a song intentionally queued twice is collapsed to one.
+        const additions = queueAdditions(prev, serverQueue, currentSongRef.current);
+        if (additions.length === 0) return prev;
+        const merged = [...prev, ...additions];
+
+        // Room is idle → start playing the first newly-queued song immediately.
+        if (!currentSongRef.current) {
+          const [next, ...rest] = merged;
+          setCurrentSong(next);
+          setIsPlaying(true);
+          if (audioRef.current) {
+            const src = resolveSongUrl(next);
+            if (src) applyAudioSrc(src, true);
+          }
+          const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
+          emitHostPlayback(payload);
+          persistPlayback(payload);
+          try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(rest)); } catch (e) {}
+          return rest;
+        }
+
+        try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(merged)); } catch (e) {}
+        return merged; // host tick broadcasts + persists on its next cycle
+      });
     });
 
     return () => {

@@ -65,6 +65,23 @@ export const buildQueuePayload = (q = []) => {
   });
 };
 
+// Identity of a queue entry by its underlying song, tolerating the two id
+// shapes in play: backend queue items carry `songId`, in-memory ones use `_id`/`id`.
+const queueSongKey = (x) => String(x?.songId || x?._id || x?.id || '');
+
+// Given the host's current in-memory queue, a server queue, and the currently
+// playing song, return the server items that aren't already queued or playing.
+// Additive only — never removes. Dedup is by song id (a song queued twice
+// collapses to one).
+export const queueAdditions = (prev = [], serverQueue = [], currentSong = null) => {
+  const have = new Set((prev || []).map(queueSongKey));
+  const curKey = currentSong ? queueSongKey(currentSong) : null;
+  return (serverQueue || []).filter((it) => {
+    const k = queueSongKey(it);
+    return k && k !== curKey && !have.has(k);
+  });
+};
+
 export const resolveSongObj = (entry, allSongs) => {
   if (!entry) return null;
   if (typeof entry === 'string') {
