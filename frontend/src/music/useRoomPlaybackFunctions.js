@@ -1038,7 +1038,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
     };
     audioRef.current.addEventListener('loadedmetadata', onLoadedMetaHost);
 
-    if (!Number.isNaN(currentTime) && currentTime > 0 && audioRef.current.duration && currentTime < audioRef.current.duration) {
+    if (typeof currentTime === 'number' && currentTime >= 0) {
       try { audioRef.current.currentTime = currentTime; } catch (e) {}
     }
     if (isPlaying) {
