@@ -304,7 +304,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       {/* Panels: Queue, Playlist, Requests */}
       <div className="panels-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <QueuePanel roomCode={roomCode} socket={socket} />
+          <QueuePanel roomCode={roomCode} socket={socket} playNow={playNow} isHost={isHost} />
         </div>
         <div style={{ flex: 1 }}>
           <PlaylistPanel roomCode={roomCode} socket={socket} isHost={isHost} onPlayQueue={async () => {
@@ -400,7 +400,10 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                 <li key={idKey}>
                   <span>{index + 1}. {(s?.title || '(unknown)')} - {(s?.artist || '')}</span>
                   {isHost && (
-                    <button onClick={() => removeFromQueue(index)}>Remove</button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => playNow(s)}>▶ Play Now</button>
+                      <button onClick={() => removeFromQueue(index)}>Remove</button>
+                    </div>
                   )}
                 </li>
               );

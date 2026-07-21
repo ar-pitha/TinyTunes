@@ -6,7 +6,7 @@ import './panels.css';
 /**
  * QueuePanel - Displays the current queue and allows queue management
  */
-export const QueuePanel = ({ roomCode, socket }) => {
+export const QueuePanel = ({ roomCode, socket, playNow, isHost }) => {
   const { queue, addToQueue, removeFromQueue, fetchQueue, loading, error } = useQueue();
   const { user, token } = useAuth();
   const [expanded, setExpanded] = useState(false);
@@ -73,13 +73,24 @@ export const QueuePanel = ({ roomCode, socket }) => {
                     <p className="item-title">{item.title}</p>
                     <p className="item-artist">{item.artist}</p>
                   </div>
-                  <button
-                    className="remove-btn"
-                    onClick={() => handleRemoveFromQueue(item._id)}
-                    title="Remove from queue"
-                  >
-                    ✕
-                  </button>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {isHost && playNow && (
+                      <button
+                        className="play-btn"
+                        onClick={() => playNow(item)}
+                        title="Play this song now"
+                      >
+                        ▶
+                      </button>
+                    )}
+                    <button
+                      className="remove-btn"
+                      onClick={() => handleRemoveFromQueue(item._id)}
+                      title="Remove from queue"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
