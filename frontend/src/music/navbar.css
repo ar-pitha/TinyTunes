@@ -79,20 +79,22 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.65rem;
+  font-weight: 800;
   color: white;
   text-decoration: none;
-  transition: all 0.3s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
+  letter-spacing: -0.5px;
 }
 
 .header__logo:hover {
   transform: scale(1.05);
+  filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.2));
 }
 
 .header__logo-icon {
-  font-size: 1.75rem;
+  font-size: 1.9rem;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
