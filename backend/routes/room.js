@@ -409,6 +409,16 @@ router.delete('/:code/queue/:itemId', authenticateToken, async (req, res) => {
     room.updatedAt = new Date();
     await room.save();
 
+    // Emit queue update to all sockets in the room
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(normalizedCode).emit('queueUpdated', { roomCode: normalizedCode, queue: room.queue });
+      }
+    } catch (e) {
+      console.error('Failed to emit queueUpdated:', e.message);
+    }
+
     res.json({ message: 'Song removed from queue' });
   } catch (error) {
     res.status(500).json({ error: error.message });

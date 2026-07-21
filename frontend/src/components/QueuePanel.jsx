@@ -6,10 +6,11 @@ import './panels.css';
 /**
  * QueuePanel - Displays the current queue and allows queue management
  */
-export const QueuePanel = ({ roomCode, socket, playNow, isHost }) => {
+export const QueuePanel = ({ roomCode, socket, playNow, isHost, onPause }) => {
   const { queue, addToQueue, removeFromQueue, fetchQueue, loading, error } = useQueue();
   const { user, token } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const [playingItemId, setPlayingItemId] = useState(null);
 
   useEffect(() => {
     if (roomCode && token) {
@@ -75,13 +76,31 @@ export const QueuePanel = ({ roomCode, socket, playNow, isHost }) => {
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {isHost && playNow && (
-                      <button
-                        className="play-btn"
-                        onClick={() => playNow(item)}
-                        title="Play this song now"
-                      >
-                        ▶
-                      </button>
+                      <>
+                        {playingItemId !== item._id ? (
+                          <button
+                            className="play-btn"
+                            onClick={() => {
+                              setPlayingItemId(item._id);
+                              playNow(item);
+                            }}
+                            title="Play this song now"
+                          >
+                            ▶
+                          </button>
+                        ) : (
+                          <button
+                            className="pause-btn"
+                            onClick={() => {
+                              setPlayingItemId(null);
+                              if (onPause) onPause();
+                            }}
+                            title="Pause playback"
+                          >
+                            ⏸
+                          </button>
+                        )}
+                      </>
                     )}
                     <button
                       className="remove-btn"
