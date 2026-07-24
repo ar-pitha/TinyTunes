@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Music4, Upload, ListMusic, AlertCircle } from 'lucide-react';
 import './songmanager.css';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
@@ -702,11 +703,11 @@ const SongManager = () => {
 						return (
 							<React.Fragment key={_id}>
 								<tr className={selectedSongId === _id ? 'active' : ''}>
-									<td>{title}</td>
-									<td>{artist}</td>
-									<td>{album}</td>
-									<td>{duration}</td>
-									<td>{folder}</td>
+									<td data-label="Title">{title}</td>
+									<td data-label="Artist">{artist}</td>
+									<td data-label="Album">{album}</td>
+									<td data-label="Duration">{duration}</td>
+									<td data-label="Folder">{folder}</td>
 									<td>
 										<div className="action-buttons">
 											<button
@@ -802,14 +803,34 @@ const SongManager = () => {
 
 	// Prepare songs content to render (avoid IIFE inside JSX which caused blank page)
 	const songsContent = (() => {
-		// While loading, show loading indicator
+		// While loading, show skeleton rows
 		if (listLoading) {
-			return <p>Loading songs...</p>;
+			return (
+				<div aria-busy="true" aria-label="Loading songs">
+					{Array.from({ length: 6 }).map((_, i) => (
+						<div className="sm-skel-row" key={i}>
+							<div className="ds-skeleton" style={{ flex: 3 }} />
+							<div className="ds-skeleton" style={{ flex: 2 }} />
+							<div className="ds-skeleton" style={{ flex: 2 }} />
+							<div className="ds-skeleton" style={{ flex: 1 }} />
+						</div>
+					))}
+				</div>
+			);
 		}
 
 		// If no songs at all
 		if (!songs || songs.length === 0) {
-			return <p>No songs found. Upload some songs first!</p>;
+			return (
+				<div className="sm-state">
+					<span className="sm-state__icon"><Music4 size={30} /></span>
+					<div className="sm-state__title">No songs yet</div>
+					<p className="sm-state__text">Your library is empty. Upload your first track to start building your collection.</p>
+					<button className="ds-btn ds-btn--primary" onClick={() => setShowUploadModal(true)}>
+						<Upload size={16} /> Upload a song
+					</button>
+				</div>
+			);
 		}
 
 		// PREVIOUS: favorites were excluded here which hid favorited songs from the main list.
@@ -823,7 +844,13 @@ const SongManager = () => {
 		});
 
 		if (filtered.length === 0) {
-			return <p>No songs found for the selected album.</p>;
+			return (
+				<div className="sm-state">
+					<span className="sm-state__icon"><ListMusic size={30} /></span>
+					<div className="sm-state__title">Nothing in this album</div>
+					<p className="sm-state__text">No songs match the selected album filter.</p>
+				</div>
+			);
 		}
 
 		// If viewing all albums, group by album and render a table per album
@@ -1068,7 +1095,7 @@ const SongManager = () => {
 				<h2 className="songs-title">
 					{selectedAlbum === 'All Albums' ? 'Your Uploaded Songs' : `Album: ${selectedAlbum}`}
 				</h2>
-				{listError && <p className="error-message">{listError}</p>}
+				{listError && <p className="error-message"><AlertCircle size={16} /> {listError}</p>}
 				{songsContent}
 			</div>
 

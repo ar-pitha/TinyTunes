@@ -83,6 +83,7 @@ export const QueuePanel = ({ roomCode, socket, playNow, isHost, onPause }) => {
                             onClick={() => {
                               setPlayingItemId(item._id);
                               playNow(item);
+                              handleRemoveFromQueue(item._id); // remove from the queue once it starts playing
                             }}
                             title="Play this song now"
                           >

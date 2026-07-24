@@ -50,22 +50,22 @@
 
 /* ========== Main Room Container ========== */
 .room {
-  padding: 2rem;
+  padding: 1.25rem 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
   background: transparent;
   min-height: calc(100vh - 140px);
-  color: #0f172a;
+  color: var(--color-text);
   animation: fadeIn 0.5s ease-out;
 }
 
 .room h2 {
   color: white;
-  margin: 0 0 1.5rem 0;
-  font-size: 2.2rem;
+  margin: 0 0 1.25rem 0;
+  font-size: 2rem;
   font-weight: 800;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  padding: 2rem;
+  padding: 1.35rem 1.75rem;
   border-radius: 1.25rem;
   box-shadow: 0 12px 36px rgba(99, 102, 241, 0.25);
   letter-spacing: -0.5px;
@@ -73,11 +73,11 @@
 
 /* ========== Room Info Section ========== */
 .room-info {
-  margin-bottom: 2rem;
-  padding: 1.75rem;
-  background: white;
+  margin-bottom: 1.5rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -97,7 +97,7 @@
 .room-info div strong {
   display: block;
   font-size: 0.7rem;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 0.5rem;
@@ -107,7 +107,7 @@
 .room-info div span {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text);
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -137,10 +137,43 @@
   transform: scale(0.98);
 }
 
+/* ---- Members shown as chips inside the Leave Room card ---- */
+.room-info .room-info__users { flex: 2 1 240px; min-width: 200px; }
+.room-user-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.15rem; }
+.room-info__users .room-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 0.28rem 0.7rem;
+  -webkit-text-fill-color: currentColor;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+.room-info .room-user-remove {
+  display: grid;
+  place-items: center;
+  width: 16px; height: 16px;
+  padding: 0; margin: 0;
+  border: none; border-radius: 50%;
+  background: transparent;
+  color: var(--danger);
+  box-shadow: none;
+  font-size: 1rem; font-weight: 700; line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.room-info .room-user-remove:hover { background: var(--color-danger-bg); box-shadow: none; transform: none; }
+
 /* ========== Error Section ========== */
 .error {
-  color: #991b1b;
-  background-color: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
+  color: var(--danger);
+  background: var(--color-danger-bg);
   padding: 1rem;
   border-radius: 0.75rem;
   margin: 1rem 0;
@@ -175,7 +208,7 @@
   margin-top: 8px;
   width: 100%;
   min-width: 180px;
-  background: #e5e7eb;
+  background: var(--color-surface-2);
   border-radius: 999px;
   overflow: hidden;
   position: relative;
@@ -198,7 +231,7 @@
 .loading {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 1rem;
   font-weight: 500;
 }
@@ -209,11 +242,11 @@
 
 /* ========== Playback Info Section ========== */
 .playback-info {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: white;
+  margin-bottom: 1.5rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(99, 102, 241, 0.08);
   backdrop-filter: blur(10px);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -223,7 +256,7 @@
   font-weight: 800;
   margin-bottom: 1rem;
   font-size: 1.15rem;
-  color: #0f172a;
+  color: var(--color-text);
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -244,7 +277,7 @@
 .playback-progress-bar {
   position: relative;
   height: 8px;
-  background: rgba(226, 232, 240, 0.7);
+  background: var(--color-border);
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
@@ -280,7 +313,7 @@
 .playback-progress-time {
   margin-top: 0.75rem;
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   text-align: center;
   font-weight: 600;
 }
@@ -325,19 +358,19 @@
 
 /* ========== Songs Section ========== */
 .songs {
-  margin-bottom: 2rem;
-  padding: 2rem;
-  background: white;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(10px);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .songs h3 {
-  margin: 0 0 1.5rem 0;
-  color: #0f172a;
+  margin: 0 0 1rem 0;
+  color: var(--color-text);
   font-size: 1.3rem;
   font-weight: 800;
   padding-bottom: 1rem;
@@ -357,7 +390,7 @@
 
 .songs li {
   padding: 0.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -377,12 +410,12 @@
 .songs li .song-title {
   flex: 1;
   font-weight: 500;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .songs li .song-artist {
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
   margin: 0 1rem;
 }
 
@@ -415,16 +448,40 @@
 
 /* ========== Album Block ========== */
 .album-block {
-  margin-bottom: 1.5rem;
-  padding: 1.5rem;
-  background: white;
-  border-radius: 1.25rem;
-  border: 2px solid rgba(99, 102, 241, 0.2);
-  border-left: 5px solid #6366f1;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  border-radius: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--brand-500);
+  box-shadow: var(--shadow-sm);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  max-width: 560px;
 }
+
+/* Open album: stack each song (title on top, actions below) so it fits the card width */
+.album-block .album-table,
+.album-block .album-table tbody,
+.album-block .album-table tr,
+.album-block .album-table td {
+  display: block;
+  width: 100%;
+}
+.album-block .album-table tr {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.album-block .album-table tr:hover {
+  background: transparent;
+  border-left: none;
+  padding-left: 0;
+}
+.album-block .album-table tr:last-child { border-bottom: none; }
+.album-block .album-table td { padding: 0; }
+.album-block .album-table td:first-child { margin-bottom: 0.5rem; }
+.album-block .album-table td:last-child { text-align: left; }
+.album-block .album-table td button { margin: 0 0.4rem 0.4rem 0 !important; }
 
 .album-block:hover {
   box-shadow: 0 8px 20px rgba(99, 102, 241, 0.12);
@@ -433,9 +490,9 @@
 
 .album-block h3 {
   margin: 0 0 1rem 0;
-  color: #0f172a;
-  font-size: 1.15rem;
-  font-weight: 800;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 700;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -448,12 +505,12 @@
 }
 
 .album-table tr {
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  border-bottom: 1px solid var(--color-border);
   transition: all 0.2s ease;
 }
 
 .album-table tr:hover {
-  background-color: linear-gradient(135deg, rgba(99, 102, 241, 0.04) 0%, rgba(139, 92, 246, 0.02) 100%);
+  background: rgba(99, 102, 241, 0.06);
   border-left: 3px solid #6366f1;
   padding-left: 0.5rem;
 }
@@ -470,14 +527,45 @@
 
 .album-table td:first-child {
   flex: 1;
-  color: #0f172a;
+  color: var(--color-text);
   font-weight: 600;
 }
 
 .album-table td:last-child {
   text-align: right;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 2.4;
 }
+
+/* Per-song action buttons — professional hierarchy (override .songs button gradient) */
+.album-table td button {
+  margin: 0 0 0 0.4rem !important;
+  padding: 0.45rem 0.85rem;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: none;
+  transition: all 0.15s var(--ease);
+}
+.album-table td button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+/* Play Now = primary */
+.album-table td button:first-child {
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+  color: #fff;
+  border-color: transparent;
+}
+.album-table td button:first-child:hover:not(:disabled) {
+  box-shadow: var(--shadow-brand);
+}
+.album-table td button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .album-show-more {
   text-align: center;
@@ -501,21 +589,52 @@
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
 }
 
+/* ---- Compact album/song pagination (Prev Albums / page / Next Albums) ---- */
+.album-pagination { gap: 6px; margin-top: 0.6rem; flex-wrap: wrap; align-items: center; }
+.songs .album-pagination button,
+.album-pagination button {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  min-height: auto;
+  width: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  box-shadow: none;
+  letter-spacing: 0;
+}
+.songs .album-pagination button:hover:not(:disabled),
+.album-pagination button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: none;
+  box-shadow: none;
+}
+.album-pagination button:disabled { opacity: 0.45; }
+.album-pagination > div {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* ========== Queue Section ========== */
 .queue {
-  margin-bottom: 2.5rem;
-  padding: 2rem;
-  background: white;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(10px);
   animation: slideUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .queue h3 {
-  margin: 0 0 1.5rem 0;
-  color: #0f172a;
+  margin: 0 0 1rem 0;
+  color: var(--color-text);
   font-size: 1.3rem;
   font-weight: 800;
   padding-bottom: 1rem;
@@ -534,8 +653,8 @@
 }
 
 .queue li {
-  padding: 1.25rem;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -580,11 +699,11 @@
   gap: 1rem;
   align-items: center;
   justify-items: center;
-  margin-bottom: 2.5rem;
-  padding: 1.75rem;
-  background: white;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(10px);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -592,18 +711,33 @@
 
 .controls button {
   width: 100%;
-  min-height: 52px;
-  padding: 1rem 1.25rem;
-  border: none;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  border-radius: 0.875rem;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-radius: var(--radius-md);
   cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s var(--ease);
+  font-size: 0.9rem;
+  letter-spacing: 0.2px;
+}
+.controls button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+/* The center Play/Pause button — the one prominent primary action */
+.controls button:nth-child(3) {
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+  color: #fff;
+  border-color: transparent;
   font-weight: 800;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 1rem;
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25);
-  letter-spacing: 0.3px;
+  box-shadow: var(--shadow-brand);
+}
+.controls button:nth-child(3):hover:not(:disabled) {
+  box-shadow: 0 10px 28px rgba(79, 70, 229, 0.4);
 }
 
 @media (max-width: 700px) {
@@ -622,20 +756,16 @@
   }
 }
 
-.controls button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
-}
-
 .controls button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 /* ========== Host Controls ========== */
 .host-controls {
-  margin-top: 2.5rem;
-  padding: 2rem;
+  margin-top: 1.5rem;
+  padding: 1.25rem;
   background: linear-gradient(135deg, rgba(254, 243, 199, 0.1) 0%, rgba(255, 235, 130, 0.05) 100%);
   border-radius: 1.25rem;
   border: 2px solid rgba(251, 191, 36, 0.25);
@@ -643,7 +773,7 @@
 }
 
 .host-controls h3 {
-  margin: 0 0 1.5rem 0;
+  margin: 0 0 1rem 0;
   color: #b45309;
   font-size: 1.1rem;
   font-weight: 800;
@@ -673,19 +803,19 @@
 
 /* ========== User List ========== */
 .user-list {
-  margin-top: 2.5rem;
-  padding: 2rem;
-  background: white;
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--color-surface);
   border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(10px);
   animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .user-list h3 {
-  margin: 0 0 1.5rem 0;
-  color: #0f172a;
+  margin: 0 0 1rem 0;
+  color: var(--color-text);
   font-size: 1.3rem;
   font-weight: 800;
   padding-bottom: 1rem;
@@ -704,12 +834,12 @@
 }
 
 .user-list li {
-  padding: 1.25rem;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #0f172a;
+  color: var(--color-text);
   font-weight: 600;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 0.75rem;
@@ -748,7 +878,7 @@
 .enable-playback-container {
   margin-top: 2.5rem;
   padding: 2.5rem;
-  background: white;
+  background: var(--color-surface);
   border-radius: 1.25rem;
   text-align: center;
   border: 2px solid rgba(251, 191, 36, 0.3);
@@ -757,7 +887,7 @@
 }
 
 .enable-playback-container p {
-  color: #0f172a;
+  color: var(--color-text);
   font-weight: 600;
   margin-bottom: 1.5rem;
   font-size: 1.05rem;
@@ -999,7 +1129,7 @@
 .songs-tabs {
   display: flex;
   gap: 0.4rem;
-  background: #f1f5f9;
+  background: var(--color-surface-2);
   border-radius: 0.75rem;
   padding: 4px;
 }
@@ -1009,7 +1139,7 @@
   border: none;
   border-radius: 0.55rem;
   background: transparent;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -1018,14 +1148,14 @@
 }
 
 .songs-tab.active {
-  background: white;
+  background: var(--color-surface);
   color: #6366f1;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 .songs-tab:hover:not(.active) {
-  color: #334155;
-  background: rgba(255,255,255,0.6);
+  color: var(--color-text);
+  background: var(--color-surface-hover);
 }
 
 /* Device songs section inside the tab */
@@ -1091,7 +1221,7 @@
 .empty-device-songs {
   text-align: center;
   padding: 2rem;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
 }
 
 .empty-device-songs p {

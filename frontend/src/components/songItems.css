@@ -39,7 +39,7 @@
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -49,7 +49,7 @@
 .song-artist {
   margin: 0;
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -59,7 +59,7 @@
 .song-duration {
   margin: 0;
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
   font-weight: 600;
 }
 

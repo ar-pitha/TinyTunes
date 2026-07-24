@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Music from './components/music';
 import Auth from './components/Auth';
 import './App.css';
 import './index.css';

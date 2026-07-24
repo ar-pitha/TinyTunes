@@ -1,23 +1,155 @@
-/**
- * OfflineMusicPlayer Stylesheet
- * Tailwind CSS is used for main styling
- * This file contains any additional custom styles
- */
+/* ========================================
+   Distinctive Music Player - Vinyl Aesthetic
+   ======================================== */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
 
-/* Smooth transitions for player controls */
-.player-button {
-  transition: all 0.2s ease-in-out;
+/* ========== VINYL RECORD ==========*/
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.player-button:hover {
-  transform: scale(1.05);
+.vinyl-record {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+  position: relative;
+  background: conic-gradient(from 0deg, #a855f7 0deg, #7c3aed 180deg, #a855f7 360deg);
 }
 
-.player-button:active {
-  transform: scale(0.95);
+.vinyl-record.spin {
+  animation: spin 3s linear infinite;
 }
 
-/* Pulse animation for loading state */
+/* ========== ALBUM CARDS - SHELF STYLE ==========*/
+
+.album-card {
+  perspective: 1000px;
+}
+
+/* ========== VOLUME SLIDER ==========*/
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.volume-slider::-webkit-slider-track {
+  background: rgba(168, 85, 247, 0.3);
+  height: 3px;
+  border-radius: 2px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.5);
+  transition: all 0.3s ease;
+  margin-top: -5.5px;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.7);
+}
+
+.volume-slider::-moz-range-track {
+  background: rgba(168, 85, 247, 0.3);
+  height: 3px;
+  border-radius: 2px;
+  border: none;
+}
+
+.volume-slider::-moz-range-progress {
+  background: rgba(168, 85, 247, 0.3);
+  border-radius: 2px;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.5);
+  transition: all 0.3s ease;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.7);
+}
+
+/* ========== ANIMATIONS ==========*/
+
+@keyframes slideDown {
+  0% {
+    transform: translateY(-100%);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes barPlay1 {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 12px;
+  }
+}
+
+@keyframes barPlay2 {
+  0%,
+  100% {
+    height: 8px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+@keyframes barPlay3 {
+  0%,
+  100% {
+    height: 6px;
+  }
+  50% {
+    height: 10px;
+  }
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -28,70 +160,56 @@
   }
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* ========== SCROLLBAR ==========*/
+
+.song-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
 }
 
-/* Smooth progress bar animation */
-.progress-bar {
-  transition: width 0.1s linear;
-}
-
-/* Song item hover effect */
-.song-item {
-  transition: all 0.2s ease-in-out;
-}
-
-.song-item:hover {
-  transform: translateX(4px);
-}
-
-/* Now playing indicator */
-.now-playing {
-  position: relative;
-  overflow: hidden;
-}
-
-.now-playing::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(
-    180deg,
-    #a855f7,
-    #a855f7,
-    transparent
-  );
-  animation: slideDown 1s ease-in-out infinite;
-}
-
-@keyframes slideDown {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-
-/* Scrollbar styling */
 .song-list::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .song-list::-webkit-scrollbar-track {
-  background: rgb(31 41 55);
-  border-radius: 3px;
+  background: transparent;
 }
 
 .song-list::-webkit-scrollbar-thumb {
-  background: rgb(107 114 128);
-  border-radius: 3px;
+  background: rgba(168, 85, 247, 0.5);
+  border-radius: 4px;
+  transition: background 0.3s ease;
 }
 
 .song-list::-webkit-scrollbar-thumb:hover {
-  background: rgb(156 163 175);
+  background: rgba(168, 85, 247, 0.7);
+}
+
+/* ========== UTILITIES ==========*/
+
+.animate-pulse {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.song-item {
+  animation: slideIn 0.4s ease-out;
+}
+
+/* Scoped to the playing-bars indicator only (was a global `svg rect` leak) */
+.playing-bars rect:nth-child(1) {
+  animation: barPlay1 0.6s ease-in-out infinite;
+}
+
+.playing-bars rect:nth-child(2) {
+  animation: barPlay2 0.6s ease-in-out infinite;
+}
+
+.playing-bars rect:nth-child(3) {
+  animation: barPlay3 0.6s ease-in-out infinite;
+}
+
+/* ========== TYPOGRAPHY ==========*/
+
+.font-serif {
+  font-family: 'Crimson Text', serif;
 }

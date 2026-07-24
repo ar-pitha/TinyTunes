@@ -1609,16 +1609,26 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
         const payload = buildPlaybackPayload({ currentSong: null, currentTime: 0, isPlaying: false, queue: [] });
         emitHostPlayback(payload);
         persistPlayback(payload);
+        try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify([])); } catch (e) {}
         return [];
       }
 
       const [next, ...rest] = prev;
       setCurrentSong(next);
+      setCurrentTime(0); // reset so the currentSong effect doesn't seek the new song to the old song's end
       setIsPlaying(true);
+      // Actually load + play the next song on the host's audio element.
+      // Without this the queue advances in state but audio never starts.
+      if (audioRef.current) {
+        const src = resolveSongUrl(next);
+        if (src) applyAudioSrc(src, true);
+      }
 
       const payload = buildPlaybackPayload({ currentSong: next, currentTime: 0, isPlaying: true, queue: rest });
       emitHostPlayback(payload);
       persistPlayback(payload);
+      // Keep the cache in sync or the played song reappears on reload (cache wins over server queue on load)
+      try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(rest)); } catch (e) {}
 
       return rest;
     });
@@ -1669,6 +1679,8 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       const payload = buildPlaybackPayload({ currentSong, currentTime: audioRef.current ? audioRef.current.currentTime : 0, isPlaying, queue: newQ });
       emitHostPlayback(payload);
       persistPlayback(payload);
+      // Keep the cache in sync or the removed song reappears on reload (cache wins over server queue on load)
+      try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(newQ)); } catch (e) {}
       return newQ;
     });
   };
@@ -1735,7 +1747,10 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
 
     const nextQueue = removeFromQueue ? queueSource.slice(1) : queueSource;
     setQueue(nextQueue);
+    // Keep the cache in sync or the removed song reappears on reload (cache wins over server queue on load)
+    try { sessionStorage.setItem(`room_${roomCode}_queue`, JSON.stringify(nextQueue)); } catch (e) {}
     setCurrentSong(songToPlay);
+    setCurrentTime(0); // reset so the currentSong effect doesn't seek the new song to the previous song's position
     setIsPlaying(true);
     if (audioRef.current) {
       const src = resolveSongUrl(songToPlay);
@@ -1880,6 +1895,7 @@ export function useRoomPlayback(roomCode, onLeaveRoom, userId) {
       return;
     }
     setCurrentSong(prev);
+    setCurrentTime(0); // reset so the currentSong effect doesn't seek to the finished song's position
     setIsPlaying(true);
     if (audioRef.current) {
       const prevUrl = resolveSongUrl(prev);

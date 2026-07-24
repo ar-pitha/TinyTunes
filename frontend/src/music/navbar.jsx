@@ -1,422 +1,191 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import {
+  Music2, Heart, Users, Smartphone, Search, Bell,
+  Sun, Moon, Menu, X, LogOut, User, LogIn, ChevronDown,
+} from 'lucide-react';
+import { useTheme } from '../hooks/useTheme';
+import './navbar.css';
+
+const NAV_ITEMS = [
+  { to: '/songmanager', label: 'Songs', icon: Music2 },
+  { to: '/favorite', label: 'Favorites', icon: Heart },
+  { to: '/room', label: 'Rooms', icon: Users },
+  { to: '/offline-music', label: 'Device Music', icon: Smartphone },
+];
 
 const Header = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
+  const userRef = useRef(null);
 
-  // Check login status on mount and when localStorage changes
+  // Auth state — synced across tabs and via same-tab 'auth-change' event
   useEffect(() => {
     const checkAuth = () => {
-      const username = localStorage.getItem("username");
-      const token = localStorage.getItem("token");
-      
-      if (username && token) {
-        setUser(username);
-        setIsLoggedIn(true);
-      } else {
-        setUser(null);
-        setIsLoggedIn(false);
-      }
+      const username = localStorage.getItem('username');
+      const token = localStorage.getItem('token');
+      if (username && token) { setUser(username); setIsLoggedIn(true); }
+      else { setUser(null); setIsLoggedIn(false); }
     };
-
     checkAuth();
-
-    // Listen for storage changes (in case of login/logout in another tab)
     window.addEventListener('storage', checkAuth);
-    
-    // Custom event for same-tab updates
     window.addEventListener('auth-change', checkAuth);
-
     return () => {
       window.removeEventListener('storage', checkAuth);
       window.removeEventListener('auth-change', checkAuth);
     };
   }, []);
 
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
+  // Close dropdown on outside click / ESC
+  useEffect(() => {
+    const onClick = (e) => { if (userRef.current && !userRef.current.contains(e.target)) setMenuOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { setMenuOpen(false); setDrawerOpen(false); } };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
+  }, []);
 
-  const handleLogoutClick = () => {
-    localStorage.removeItem("joinedRoomCode");
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
-    
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [drawerOpen]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('joinedRoomCode');
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
     setUser(null);
     setIsLoggedIn(false);
-    setIsMenuOpen(false);
-    
-    // Dispatch custom event for other components
+    setMenuOpen(false);
+    setDrawerOpen(false);
     window.dispatchEvent(new Event('auth-change'));
-    
-    // Navigate to login
     navigate('/login');
   };
 
-  const handleLinkClick = () => {
-    setIsMenuOpen(false);
-  };
+  const initials = (user || 'U').trim().charAt(0).toUpperCase();
 
   return (
-    <>
-      <style>{`
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
+    <header className="nav ds-glass">
+      <Link to="/songmanager" className="nav__brand">
+        <span className="nav__brand-mark"><Music2 size={18} /></span>
+        MusicApp
+      </Link>
 
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 15px 30px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          position: sticky;
-          top: 0;
-          z-index: 1000;
-        }
+      <nav className="nav__links">
+        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          <NavLink key={to} to={to} className="nav__link">
+            <Icon size={16} /> {label}
+          </NavLink>
+        ))}
+      </nav>
 
-        .header__brand {
-          font-size: 24px;
-          font-weight: 700;
-          color: white;
-          text-decoration: none;
-          cursor: pointer;
-        }
+      <div className="nav__right">
+        <label className="nav__search">
+          <Search size={16} />
+          <input type="text" placeholder="Search songs, rooms…" aria-label="Search" />
+          <kbd>Ctrl K</kbd>
+        </label>
 
-        .header__nav {
-          display: flex;
-          gap: 30px;
-          align-items: center;
-        }
-
-        .header__link {
-          color: white;
-          text-decoration: none;
-          font-weight: 600;
-          font-size: 16px;
-          padding: 8px 16px;
-          border-radius: 6px;
-          transition: all 0.3s ease;
-          position: relative;
-          cursor: pointer;
-        }
-
-        .header__link:hover {
-          background-color: rgba(255, 255, 255, 0.15);
-          transform: translateY(-2px);
-        }
-
-        .header__link::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 50%;
-          transform: translateX(-50%) scaleX(0);
-          width: 80%;
-          height: 2px;
-          background-color: white;
-          transition: transform 0.3s ease;
-        }
-
-        .header__link:hover::after {
-          transform: translateX(-50%) scaleX(1);
-        }
-
-        .header__user-section {
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-
-        .header__user-info {
-          font-size: 15px;
-          font-weight: 500;
-          padding: 6px 12px;
-          background-color: rgba(255, 255, 255, 0.1);
-          border-radius: 20px;
-          backdrop-filter: blur(10px);
-        }
-
-        .header__button {
-          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-          border: none;
-          color: white;
-          padding: 10px 20px;
-          border-radius: 25px;
-          cursor: pointer;
-          font-weight: 600;
-          font-size: 14px;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
-        }
-
-        .header__button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(245, 87, 108, 0.4);
-        }
-
-        .header__button:active {
-          transform: translateY(0);
-        }
-
-        .header__hamburger {
-          display: none;
-          flex-direction: column;
-          gap: 5px;
-          cursor: pointer;
-          background: none;
-          border: none;
-          padding: 8px;
-          z-index: 1001;
-        }
-
-        .header__hamburger-line {
-          width: 28px;
-          height: 3px;
-          background-color: white;
-          border-radius: 3px;
-          transition: all 0.3s ease;
-        }
-
-        .header__hamburger.active .header__hamburger-line:nth-child(1) {
-          transform: rotate(45deg) translate(8px, 8px);
-        }
-
-        .header__hamburger.active .header__hamburger-line:nth-child(2) {
-          opacity: 0;
-        }
-
-        .header__hamburger.active .header__hamburger-line:nth-child(3) {
-          transform: rotate(-45deg) translate(8px, -8px);
-        }
-
-        .header__mobile-menu {
-          display: none;
-        }
-
-        @media (max-width: 721px) {
-          .header {
-            padding: 15px 20px;
-          }
-
-          .header__hamburger {
-            display: flex;
-          }
-
-          .header__nav,
-          .header__user-section {
-            display: none;
-          }
-
-          .header__mobile-menu {
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transform: translateX(-100%);
-            transition: transform 0.3s ease;
-            overflow-y: auto;
-            padding-top: 80px;
-          }
-
-          .header__mobile-menu.open {
-            transform: translateX(0);
-          }
-
-          .header__mobile-nav {
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-            padding: 20px;
-          }
-
-          .header__mobile-link {
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 18px;
-            padding: 18px 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-            cursor: pointer;
-          }
-
-          .header__mobile-link:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding-left: 30px;
-          }
-
-          .header__mobile-user-section {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            padding: 30px 20px;
-            border-top: 2px solid rgba(255, 255, 255, 0.2);
-            margin-top: 20px;
-          }
-
-          .header__mobile-user-info {
-            font-size: 16px;
-            font-weight: 500;
-            padding: 12px 20px;
-            background-color: rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
-            text-align: center;
-          }
-
-          .header__mobile-button {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            border: none;
-            color: white;
-            padding: 14px 20px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
-          }
-
-          .header__mobile-button:active {
-            transform: scale(0.98);
-          }
-        }
-
-        @media (min-width: 722px) and (max-width: 1024px) {
-          .header {
-            padding: 15px 25px;
-          }
-
-          .header__nav {
-            gap: 20px;
-          }
-
-          .header__link {
-            font-size: 15px;
-            padding: 7px 14px;
-          }
-
-          .header__user-section {
-            gap: 12px;
-          }
-
-          .header__user-info {
-            font-size: 14px;
-          }
-
-          .header__button {
-            padding: 9px 18px;
-            font-size: 13px;
-          }
-        }
-
-        @media (min-width: 722px) and (max-width: 900px) {
-          .header__nav {
-            gap: 15px;
-          }
-
-          .header__link {
-            font-size: 14px;
-            padding: 6px 12px;
-          }
-        }
-
-        @media (min-width: 1400px) {
-          .header {
-            padding: 18px 60px;
-          }
-
-          .header__nav {
-            gap: 40px;
-          }
-
-          .header__link {
-            font-size: 17px;
-          }
-
-          .header__button {
-            padding: 12px 24px;
-            font-size: 15px;
-          }
-        }
-      `}</style>
-
-      <header className="header">
-        <Link to="/songmanager" className="header__brand">MusicApp</Link>
-
-        <nav className="header__nav">
-          <Link to="/songmanager" className="header__link">Songs</Link>
-          <Link to="/favorite" className="header__link">Favorites</Link>
-          <Link to="/room" className="header__link">Rooms</Link>
-          <Link to="/offline-music" className="header__link">🎵 Device Music</Link>
-        </nav>
-
-        <div className="header__user-section">
-          {isLoggedIn && user ? (
-            <>
-              <span className="header__user-info">
-                Hello, {user}
-              </span>
-              <button onClick={handleLogoutClick} className="header__button">
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" className="header__link">Login</Link>
-              <Link to="/signup" className="header__link">Signup</Link>
-            </>
-          )}
-        </div>
-
-        <button 
-          className={`header__hamburger ${isMenuOpen ? 'active' : ''}`}
-          onClick={toggleMenu}
-          aria-label="Toggle menu"
+        <button
+          className="nav__icon-btn nav__icon-btn--theme"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+          title={isDark ? 'Light mode' : 'Dark mode'}
         >
-          <span className="header__hamburger-line"></span>
-          <span className="header__hamburger-line"></span>
-          <span className="header__hamburger-line"></span>
+          {isDark ? <Sun size={19} /> : <Moon size={19} />}
         </button>
 
-        <div className={`header__mobile-menu ${isMenuOpen ? 'open' : ''}`}>
-          <nav className="header__mobile-nav">
-            <Link to="/songmanager" className="header__mobile-link" onClick={handleLinkClick}>Songs</Link>
-            <Link to="/favorite" className="header__mobile-link" onClick={handleLinkClick}>Favorites</Link>
-            <Link to="/room" className="header__mobile-link" onClick={handleLinkClick}>Rooms</Link>
-            <Link to="/offline-music" className="header__mobile-link" onClick={handleLinkClick}>🎵 Device Music</Link>
-          </nav>
+        {isLoggedIn && (
+          <button className="nav__icon-btn" aria-label="Notifications" title="Notifications">
+            <Bell size={19} />
+            <span className="nav__badge-dot" />
+          </button>
+        )}
 
-          <div className="header__mobile-user-section">
-            {isLoggedIn && user ? (
-              <>
-                <div className="header__mobile-user-info">
-                  Hello, {user}
+        {isLoggedIn && user ? (
+          <div className="nav__user" ref={userRef}>
+            <button className="nav__user-trigger" onClick={() => setMenuOpen((o) => !o)} aria-haspopup="menu" aria-expanded={menuOpen}>
+              <span className="nav__avatar">{initials}</span>
+              <span className="nav__user-name">{user}</span>
+              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)' }} />
+            </button>
+            {menuOpen && (
+              <div className="nav__menu" role="menu">
+                <div className="nav__menu-header">
+                  <div className="name">{user}</div>
+                  <div className="sub">Signed in</div>
                 </div>
-                <button onClick={handleLogoutClick} className="header__mobile-button">
-                  Logout
+                <Link to="/songmanager" className="nav__menu-item" role="menuitem" onClick={() => setMenuOpen(false)}>
+                  <User size={16} /> My Library
+                </Link>
+                <button className="nav__menu-item danger" role="menuitem" onClick={handleLogout}>
+                  <LogOut size={16} /> Log out
                 </button>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="header__mobile-link" onClick={handleLinkClick}>Login</Link>
-                <Link to="/signup" className="header__mobile-link" onClick={handleLinkClick}>Signup</Link>
-              </>
+              </div>
             )}
           </div>
-        </div>
-      </header>
-    </>
+        ) : (
+          <>
+            <Link to="/login" className="ds-btn ds-btn--ghost"><LogIn size={16} /> Login</Link>
+            <Link to="/signup" className="ds-btn ds-btn--primary">Sign up</Link>
+          </>
+        )}
+
+        <button className="nav__icon-btn nav__hamburger" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+          <Menu size={22} />
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {drawerOpen && (
+        <>
+          <div className="nav__scrim" onClick={() => setDrawerOpen(false)} />
+          <aside className="nav__drawer" role="dialog" aria-label="Menu">
+            <div className="nav__drawer-head">
+              <Link to="/songmanager" className="nav__brand" onClick={() => setDrawerOpen(false)}>
+                <span className="nav__brand-mark"><Music2 size={18} /></span> MusicApp
+              </Link>
+              <button className="nav__icon-btn" onClick={() => setDrawerOpen(false)} aria-label="Close menu"><X size={22} /></button>
+            </div>
+
+            <nav className="nav__drawer-links">
+              {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+                <NavLink key={to} to={to} className="nav__drawer-link" onClick={() => setDrawerOpen(false)}>
+                  <Icon size={20} /> {label}
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="nav__drawer-foot">
+              <button className="nav__drawer-link" onClick={toggleTheme}>
+                {isDark ? <Sun size={20} /> : <Moon size={20} />} {isDark ? 'Light mode' : 'Dark mode'}
+              </button>
+              {isLoggedIn && user ? (
+                <>
+                  <div className="nav__drawer-user">
+                    <span className="nav__avatar">{initials}</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>{user}</div>
+                      <div style={{ fontSize: 'var(--text-caption)', color: 'var(--color-text-muted)' }}>Signed in</div>
+                    </div>
+                  </div>
+                  <button className="ds-btn ds-btn--danger ds-btn--block" onClick={handleLogout}><LogOut size={16} /> Log out</button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="ds-btn ds-btn--secondary ds-btn--block" onClick={() => setDrawerOpen(false)}><LogIn size={16} /> Login</Link>
+                  <Link to="/signup" className="ds-btn ds-btn--primary ds-btn--block" onClick={() => setDrawerOpen(false)}>Sign up</Link>
+                </>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
+    </header>
   );
 };
 

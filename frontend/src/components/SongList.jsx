@@ -28,11 +28,11 @@ const SongList = ({
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg overflow-hidden">
+    <div className="bg-white/5 backdrop-blur-xl rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-700 sticky top-0 bg-gray-800/95 backdrop-blur">
-        <h2 className="text-lg font-semibold">Playlist</h2>
-        <p className="text-sm text-gray-400">{songs.length} songs</p>
+      <div className="px-8 py-6 border-b border-white/10 sticky top-0 bg-white/5 backdrop-blur">
+        <h2 className="text-2xl font-black text-white mb-1">Playlist</h2>
+        <p className="text-sm text-gray-400">{songs.length} song{songs.length !== 1 ? 's' : ''}</p>
       </div>
 
       {/* Song List */}
@@ -65,30 +65,40 @@ const SongItem = ({
 }) => {
   return (
     <div
-      className={`px-6 py-4 border-b border-gray-700/50 flex items-center gap-4 cursor-pointer transition hover:bg-gray-700/50 ${
-        isCurrentSong ? 'bg-gray-700 now-playing' : ''
+      className={`px-8 py-4 border-b border-white/5 flex items-center gap-5 cursor-pointer transition-all duration-300 group ${
+        isCurrentSong
+          ? 'bg-gradient-to-r from-purple-600/20 to-blue-600/10 now-playing'
+          : 'hover:bg-white/5'
       }`}
       onClick={onPlay}
     >
       {/* Song Number / Playing Indicator */}
-      <div className="w-8 text-right flex-shrink-0">
+      <div className="w-8 text-center flex-shrink-0">
         {isCurrentSong && isPlaying ? (
           <div className="w-6 h-6 mx-auto">
             <PlayingAnimation />
           </div>
         ) : (
-          <span className="text-sm text-gray-500">{index + 1}</span>
+          <span className="text-sm text-gray-500 group-hover:text-gray-300 font-semibold transition-colors">
+            {String(index + 1).padStart(2, '0')}
+          </span>
         )}
       </div>
 
       {/* Song Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-white truncate">{song.title}</h3>
-        <p className="text-sm text-gray-400 truncate">{song.artist}</p>
+        <h3 className={`font-bold text-white truncate transition-colors ${
+          isCurrentSong ? 'text-purple-300' : 'group-hover:text-purple-300'
+        }`}>
+          {song.title}
+        </h3>
+        <p className="text-sm text-gray-500 truncate group-hover:text-gray-400 transition-colors">
+          {song.artist}
+        </p>
       </div>
 
       {/* Duration */}
-      <div className="text-sm text-gray-400 flex-shrink-0">
+      <div className="text-sm text-gray-600 flex-shrink-0 group-hover:text-gray-400 transition-colors font-medium">
         {song.formattedDuration}
       </div>
 
@@ -98,7 +108,7 @@ const SongItem = ({
           e.stopPropagation();
           onPlay();
         }}
-        className="w-10 h-10 rounded-full bg-purple-600 hover:bg-purple-500 flex items-center justify-center transition hover:scale-110 active:scale-95 flex-shrink-0"
+        className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 flex items-center justify-center transition-all hover:scale-110 active:scale-95 flex-shrink-0 shadow-lg shadow-purple-500/40 opacity-0 group-hover:opacity-100 hover:opacity-100"
         title="Play song"
       >
         <Play className="w-5 h-5 ml-0.5" />

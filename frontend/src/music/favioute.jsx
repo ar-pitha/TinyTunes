@@ -1,4 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
+import {
+  Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Heart,
+  Lock, AlertCircle, Music4, LogIn, ChevronsLeft, ChevronsRight, Loader2,
+} from 'lucide-react';
 import './favioute.css';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
@@ -475,15 +479,15 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
   if (!token) return (
     <div className="favorites-container">
       <div className="favorites-empty">
-        <div className="favorites-empty-icon">🔐</div>
-        <div className="favorites-empty-title">Sign In Required</div>
-        <div className="favorites-empty-text">Please log in to view your favorite songs</div>
-        <button 
-          className="control-btn" 
+        <div className="favorites-empty-icon"><Lock size={30} /></div>
+        <div className="favorites-empty-title">Sign in required</div>
+        <div className="favorites-empty-text">Please log in to view your favorite songs.</div>
+        <button
+          className="ds-btn ds-btn--primary"
           onClick={() => window.location.assign('/login')}
           style={{ marginTop: '1rem' }}
         >
-          Go to Login
+          <LogIn size={16} /> Go to login
         </button>
       </div>
     </div>
@@ -493,7 +497,7 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
     <div className="favorites-container">
       <div className="favorites-loading">
         <div className="loading-spinner"></div>
-        <p>Loading your favorite songs...</p>
+        <p>Loading your favorite songs…</p>
       </div>
     </div>
   );
@@ -502,17 +506,17 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
     return (
       <div className="favorites-container">
         <div className="favorites-error">
-          {error}
+          <AlertCircle size={18} /> {error}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-          <button 
-            className="control-btn" 
+          <button
+            className="ds-btn ds-btn--primary"
             onClick={() => setReloadToggle(r => !r)}
           >
             Retry
           </button>
-          <button 
-            className="control-btn" 
+          <button
+            className="ds-btn ds-btn--ghost"
             onClick={() => { localStorage.removeItem('token'); window.location.reload(); }}
           >
             Logout
@@ -537,15 +541,15 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
           <h1 className="favorites-title">Your Favorite Songs</h1>
         </div>
         <div className="favorites-empty">
-          <div className="favorites-empty-icon">❤️</div>
-          <div className="favorites-empty-title">No Favorites Yet</div>
-          <div className="favorites-empty-text">Start adding songs to your favorites to see them here</div>
-          <button 
-            className="control-btn" 
-            onClick={() => window.location.assign('/songs')}
+          <div className="favorites-empty-icon"><Heart size={30} /></div>
+          <div className="favorites-empty-title">No favorites yet</div>
+          <div className="favorites-empty-text">Tap the heart on any song to save it here for quick access.</div>
+          <button
+            className="ds-btn ds-btn--primary"
+            onClick={() => window.location.assign('/songmanager')}
             style={{ marginTop: '1rem' }}
           >
-            Browse Songs
+            <Music4 size={16} /> Browse songs
           </button>
         </div>
       </div>
@@ -563,44 +567,43 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
       {/* Playback Controls */}
       <div className="favorites-controls">
         <div className="control-buttons">
-          <button className="control-btn" onClick={playAll} title="Play all favorites">
-            ▶ Play All
+          <button className="control-btn primary" onClick={playAll} title="Play all favorites">
+            <Play size={16} /> Play all
           </button>
-          <button className="control-btn" onClick={handlePrev} title="Previous song">
-            ⏮ Prev
+          <button className="control-btn" onClick={handlePrev} title="Previous song" aria-label="Previous">
+            <SkipBack size={16} /> Prev
           </button>
-          <button 
-            className="control-btn" 
+          <button
+            className="control-btn"
             onClick={() => {
               if (!audioRef.current) return;
-              if (isPlayingLocal) { 
-                audioRef.current.pause(); 
-                setIsPlayingLocal(false); 
-                setIsPlaying(false); 
-              } else { 
-                audioRef.current.play().catch(() => {}); 
-                setIsPlayingLocal(true); 
-                setIsPlaying(true); 
+              if (isPlayingLocal) {
+                audioRef.current.pause();
+                setIsPlayingLocal(false);
+                setIsPlaying(false);
+              } else {
+                audioRef.current.play().catch(() => {});
+                setIsPlayingLocal(true);
+                setIsPlaying(true);
               }
             }}
             title={isPlayingLocal ? 'Pause' : 'Play'}
           >
-            {isPlayingLocal ? '⏸ Pause' : '▶ Play'}
+            {isPlayingLocal ? <><Pause size={16} /> Pause</> : <><Play size={16} /> Play</>}
           </button>
-          <button className="control-btn" onClick={handleNext} title="Next song">
-            ⏭ Next
+          <button className="control-btn" onClick={handleNext} title="Next song" aria-label="Next">
+            <SkipForward size={16} /> Next
           </button>
-          <button 
-            className="control-btn" 
-            onClick={toggleLoopMode} 
+          <button
+            className={`control-btn ${loopMode !== 'none' ? 'active' : ''}`}
+            onClick={toggleLoopMode}
             title="Toggle loop mode"
-            style={{ opacity: loopMode !== 'none' ? 1 : 0.7 }}
           >
-            🔁 Loop: {loopMode}
+            {loopMode === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />} {loopMode === 'none' ? 'Loop off' : loopMode === 'all' ? 'Loop all' : 'Loop one'}
           </button>
         </div>
         <div className="loop-status">
-          {isBuffering ? '↻ Buffering...' : currentIndex >= 0 && queue[currentIndex]
+          {isBuffering ? <><Loader2 size={15} className="ds-spin-ic" /> Buffering…</> : currentIndex >= 0 && queue[currentIndex]
             ? `Now: ${queue[currentIndex].title}`
             : 'Not playing'}
         </div>
@@ -639,19 +642,21 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
                   </div>
                   <div className="song-duration">{song.duration}s</div>
                   <div className="song-actions">
-                    <button 
-                      className="action-btn play" 
+                    <button
+                      className="action-btn play"
                       onClick={() => handlePlay(song._id)}
                       title="Play this song"
+                      aria-label={isCurrentlyPlaying ? 'Pause' : 'Play'}
                     >
-                      {isCurrentlyPlaying ? '⏸' : '▶'}
+                      {isCurrentlyPlaying ? <Pause size={16} /> : <Play size={16} />}
                     </button>
                     <button
                       className="action-btn favorite"
                       onClick={() => handleToggleFavorite(song._id)}
                       title="Remove from favorites"
+                      aria-label="Remove from favorites"
                     >
-                      ❤️
+                      <Heart size={16} fill="currentColor" />
                     </button>
                   </div>
                 </div>
@@ -681,25 +686,25 @@ const FavoriteSongs = ({ token: propToken, onPlaySong, selectedSongId: propSelec
                       </div>
                     </div>
                     <div className="playback-controls-row">
-                      <button 
+                      <button
                         className="seek-btn"
                         onClick={() => seekBy(-10)}
                         title="Seek backward 10 seconds"
                       >
-                        « 10s
+                        <ChevronsLeft size={16} /> 10s
                       </button>
-                      <button 
+                      <button
                         className="play-pause-btn"
                         onClick={togglePlayPause}
                       >
-                        {isPlaying ? '⏸ Pause' : '▶ Play'}
+                        {isPlaying ? <><Pause size={16} /> Pause</> : <><Play size={16} /> Play</>}
                       </button>
-                      <button 
+                      <button
                         className="seek-btn"
                         onClick={() => seekBy(10)}
                         title="Seek forward 10 seconds"
                       >
-                        10s »
+                        10s <ChevronsRight size={16} />
                       </button>
                       <span className="timing-display">
                         {formatTime(playTime)} / {formatTime(trackDuration)}

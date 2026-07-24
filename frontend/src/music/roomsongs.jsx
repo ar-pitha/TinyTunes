@@ -51,7 +51,6 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
     loadDeviceSongs,
     onTimeUpdate,
     handleEnded,
-    updateRoomName,
     leaveRoom,
   } = useRoomPlayback(roomCode, onLeaveRoom, userId);
 
@@ -215,10 +214,32 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
           {room?.host?._id === userId && ' (You)'}
         </div>
         <div>
-          <strong>👥 Users:</strong> {users.length}
-        </div>
-        <div>
           <strong>Status:</strong> {isHost ? 'Host' : 'Guest'}
+        </div>
+        <div className="room-info__users">
+          <strong>👥 Users ({users.length})</strong>
+          <div className="room-user-chips">
+            {users.map(u => {
+              const name = u.username || u.name || u.email || u._id;
+              const isHostUser = u._id === room?.host?._id;
+              const isYou = u._id === userId;
+              return (
+                <span key={u._id} className="room-user-chip">
+                  {name}{isYou ? ' (You)' : ''}{isHostUser ? ' (Host)' : ''}
+                  {isHost && !isYou && (
+                    <button
+                      className="room-user-remove"
+                      title="Remove user"
+                      aria-label={`Remove ${name}`}
+                      onClick={() => removeUser(u._id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
         </div>
         <button
           onClick={() => {
@@ -401,7 +422,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                   <span>{index + 1}. {(s?.title || '(unknown)')} - {(s?.artist || '')}</span>
                   {isHost && (
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => playNow(s)}>▶ Play Now</button>
+                      <button onClick={() => playNow(s, { queueOverride: queue.filter((_, i) => i !== index) })}>▶ Play Now</button>
                       <button onClick={() => removeFromQueue(index)}>Remove</button>
                     </div>
                   )}
@@ -490,7 +511,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                         No uploaded songs match your search.
                       </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                    <div className="album-pagination" style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
                       <button onClick={() => setUploadedAlbumPage(p => Math.max(1, p - 1))} disabled={uploadedAlbumPage <= 1}>Prev Albums</button>
                       <div style={{ alignSelf: 'center' }}>Album page {uploadedAlbumPage} of {Math.max(1, Math.ceil(total / UPLOADED_ALBUM_PAGE_SIZE))}</div>
                       <button onClick={() => setUploadedAlbumPage(p => p + 1)} disabled={start + UPLOADED_ALBUM_PAGE_SIZE >= total}>Next Albums</button>
@@ -641,7 +662,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                             </tbody>
                           </table>
                           {/* Songs pagination */}
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                          <div className="album-pagination" style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
                             <button onClick={() => setDeviceSongPage(p => Math.max(1, p - 1))} disabled={deviceSongPage <= 1}>Prev</button>
                             <div style={{ alignSelf: 'center' }}>Page {deviceSongPage} of {Math.max(1, Math.ceil(total / DEVICE_SONG_PAGE_SIZE))}</div>
                             <button onClick={() => setDeviceSongPage(p => p + 1)} disabled={start + DEVICE_SONG_PAGE_SIZE >= total}>Next</button>
@@ -704,7 +725,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                                       </tbody>
                                     </table>
                                     {/* Pagination for album songs */}
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                                    <div className="album-pagination" style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
                                       <button onClick={() => setDeviceSongPage(p => Math.max(1, p - 1))} disabled={deviceSongPage <= 1}>Prev</button>
                                       <div style={{ alignSelf: 'center' }}>Page {deviceSongPage} of {Math.max(1, Math.ceil(total / DEVICE_SONG_PAGE_SIZE))}</div>
                                       <button onClick={() => setDeviceSongPage(p => p + 1)} disabled={start + DEVICE_SONG_PAGE_SIZE >= total}>Next</button>
@@ -717,7 +738,7 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
                         })}
 
                         {/* Album pagination controls */}
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                        <div className="album-pagination" style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
                           <button onClick={() => setDeviceAlbumPage(p => Math.max(1, p - 1))} disabled={deviceAlbumPage <= 1}>Prev Albums</button>
                           <div style={{ alignSelf: 'center' }}>Album page {deviceAlbumPage} of {Math.max(1, Math.ceil(totalAlbums / DEVICE_ALBUM_PAGE_SIZE))}</div>
                           <button onClick={() => setDeviceAlbumPage(p => p + 1)} disabled={albumStart + DEVICE_ALBUM_PAGE_SIZE >= totalAlbums}>Next Albums</button>
@@ -733,37 +754,6 @@ const Room = ({ roomCode, onLeaveRoom, userId }) => {
       </div>
 
 
-      {/* Host Controls */}
-      {isHost && (
-        <div className="host-controls">
-          <h3>⚙️ Host Controls</h3>
-          <button onClick={() => {
-            const newName = prompt('Enter new room name', room.name);
-            if (newName && newName !== room.name) {
-              updateRoomName(newName);
-            }
-          }}>📝 Change Room Name</button>
-        </div>
-      )}
-
-      {/* User List */}
-      <div className="user-list">
-        <h3>👥 Users in Room ({users.length})</h3>
-        <ul>
-          {users.map(u => (
-            <li key={u._id}>
-              <span>
-                {(u.username || u.name || u.email || u._id)}
-                {u._id === room?.host?._id && ' (Host)'}
-                {u._id === userId && ' (You)'}
-              </span>
-              {isHost && u._id !== userId && (
-                <button onClick={() => removeUser(u._id)}>Remove</button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
 
       <audio
         ref={audioRef}
