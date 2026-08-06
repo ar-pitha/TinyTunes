@@ -13,6 +13,7 @@ const SongManager = () => {
 	const userInteractedRef = useRef(false);  // Track if user clicked play button
 	const manualPlayAttemptRef = useRef(0);   // Track when user manually attempts playback
 	const initialLoadRef = useRef(true);      // Track if we're in initial load phase
+	const restoredRef = useRef(false);        // Saved-position restore is one-shot (canplay refires on every seek)
 
 	// Modal state
 	const [showUploadModal, setShowUploadModal] = useState(false);
@@ -108,6 +109,10 @@ const SongManager = () => {
 		if (!audio) return;
 		
 		const handleCanPlay = () => {
+			// canplay fires again after every seek/stall — restoring there would snap
+			// playback back to the (up to 2s stale) saved position, killing ±10s seeks.
+			if (restoredRef.current) return;
+			restoredRef.current = true;
 			const cachedPlayTime = sessionStorage.getItem('sm_playTime');
 			if (cachedPlayTime && initialLoadRef.current === false) {
 				const pos = parseFloat(cachedPlayTime);
@@ -420,7 +425,9 @@ const SongManager = () => {
 	const handlePlaySong = async (id) => {
 		// Mark manual play attempt to prevent sync effect interference
 		manualPlayAttemptRef.current = Date.now();
-		
+		// user picked a track: the saved position belongs to the previous one
+		restoredRef.current = true;
+
 		if (selectedSongId === id) {
 			setSelectedSongId(null);
 			if (audioSrc && String(audioSrc).startsWith('blob:')) {
